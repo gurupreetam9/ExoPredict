@@ -35,7 +35,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
-  TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -55,8 +54,9 @@ import {
 } from "@/app/actions";
 import Header from "@/components/header";
 import CircularProgress from "@/components/circular-progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import BatchPrediction from "@/components/batch-prediction";
 
 type Prediction = {
   class: string;
@@ -172,182 +172,191 @@ export default function Home() {
     }
   };
 
-
-
   return (
     <TooltipProvider>
       <main className="container mx-auto min-h-screen p-4 sm:p-6 lg:p-8">
         <Header />
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start">
-          <Card className="w-full">
-            <CardHeader>
-              <CardTitle className="font-headline text-2xl">
-                Exoplanet Prediction
-              </CardTitle>
-              <CardDescription>
-                Select a model and provide parameters to predict the likelihood
-                of it being an exoplanet.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Form {...form}>
-                <form
-                  onSubmit={form.handleSubmit(onSubmit)}
-                  className="space-y-8"
-                >
-                  <div className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="modelType"
-                      render={() => (
-                        <FormItem>
-                          <FormLabel>Select Model</FormLabel>
-                          <Select
-                            onValueChange={(v) => handleModelChange(v as ModelType)}
-                            defaultValue={modelType}
-                            value={modelType}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a model" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Kepler">Kepler</SelectItem>
-                              <SelectItem value="TESS">TESS</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
 
-                    <div className="space-y-2">
-                       <Label htmlFor="ai-prompt">
-                        Generate Parameters with AI
-                      </Label>
-                      <Textarea
-                        id="ai-prompt"
-                        placeholder="e.g., 'A hot Jupiter orbiting a sun-like star very closely...'"
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
-                        className="bg-card"
-                      />
-                       <Button
-                        type="button"
-                        onClick={handleGenerateParams}
-                        disabled={isLoadingPrompt}
-                        className="bg-primary hover:bg-primary/90"
-                      >
-                        {isLoadingPrompt && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Generate with AI
-                      </Button>
-                      <FormDescription>
-                        Describe a hypothetical exoplanet, and AI will fill in the parameters for you.
-                      </FormDescription>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      {fields.map((field) => (
+        <Tabs defaultValue="single" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="single">Single Prediction</TabsTrigger>
+            <TabsTrigger value="batch">Batch Prediction</TabsTrigger>
+          </TabsList>
+          <TabsContent value="single">
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start mt-4">
+              <Card className="w-full">
+                <CardHeader>
+                  <CardTitle className="font-headline text-2xl">
+                    Exoplanet Prediction
+                  </CardTitle>
+                  <CardDescription>
+                    Select a model and provide parameters to predict the likelihood
+                    of it being an exoplanet.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...form}>
+                    <form
+                      onSubmit={form.handleSubmit(onSubmit)}
+                      className="space-y-8"
+                    >
+                      <div className="space-y-4">
                         <FormField
-                          key={field.name}
                           control={form.control}
-                          name={field.name as any}
-                          render={({ field: formField }) => (
+                          name="modelType"
+                          render={() => (
                             <FormItem>
-                              <div className="flex items-center gap-2">
-                                <FormLabel>{field.label}</FormLabel>
-
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{field.tooltip}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </div>
-                              <FormControl>
-                                <Input
-                                  type="number"
-                                  placeholder={field.placeholder}
-                                  {...formField}
-                                   value={formField.value ?? ''}
-                                  onChange={(e) => {
-                                      const value = e.target.value;
-                                      formField.onChange(value === '' ? '' : Number(value));
-                                  }}
-                                />
-                              </FormControl>
+                              <FormLabel>Select Model</FormLabel>
+                              <Select
+                                onValueChange={(v) => handleModelChange(v as ModelType)}
+                                defaultValue={modelType}
+                                value={modelType}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select a model" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="Kepler">Kepler</SelectItem>
+                                  <SelectItem value="TESS">TESS</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                      ))}
-                    </div>
-                  </div>
-                  <Button
-                    type="submit"
-                    className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                    disabled={isLoadingPrediction}
-                  >
-                    {isLoadingPrediction && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Run Prediction
-                  </Button>
-                </form>
-              </Form>
-            </CardContent>
-          </Card>
 
-          <div className="sticky top-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="font-headline text-2xl">
-                  Prediction Results
-                </CardTitle>
-                <CardDescription>
-                  The model's confidence in the prediction.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col items-center justify-center gap-6 text-center">
-                {isLoadingPrediction ? (
-                  <div className="flex flex-col items-center justify-center gap-4 py-8">
-                     <Loader2 className="h-16 w-16 animate-spin text-accent" />
-                    <p className="text-muted-foreground">Running prediction...</p>
-                  </div>
-                ) : prediction ? (
-                  <>
-                    <CircularProgress progress={prediction.confidence} />
-                    <div className="flex flex-col gap-1">
-                      <h3 className="text-lg font-semibold text-foreground">
-                        Prediction: <span className="font-bold text-primary">{prediction.class}</span>
-                      </h3>
-                      <p className="text-muted-foreground">
-                        {modelType} Model Confidence
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
-                    <p>Results will be displayed here.</p>
-                  </div>
-                )}
-              </CardContent>
-              {prediction && (
-                <CardFooter className="flex-col items-start gap-4">
-                  <CardTitle className="text-xl font-headline">
-                    Prediction Explanation
-                  </CardTitle>
-                  <p className="text-sm text-muted-foreground">{prediction.explanation}</p>
-                </CardFooter>
-              )}
-            </Card>
-          </div>
-        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="ai-prompt">
+                            Generate Parameters with AI
+                          </Label>
+                          <Textarea
+                            id="ai-prompt"
+                            placeholder="e.g., 'A hot Jupiter orbiting a sun-like star very closely...'"
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            className="bg-card"
+                          />
+                          <Button
+                            type="button"
+                            onClick={handleGenerateParams}
+                            disabled={isLoadingPrompt}
+                            className="bg-primary hover:bg-primary/90"
+                          >
+                            {isLoadingPrompt && (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            )}
+                            Generate with AI
+                          </Button>
+                          <FormDescription>
+                            Describe a hypothetical exoplanet, and AI will fill in the parameters for you.
+                          </FormDescription>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          {fields.map((field) => (
+                            <FormField
+                              key={field.name}
+                              control={form.control}
+                              name={field.name as any}
+                              render={({ field: formField }) => (
+                                <FormItem>
+                                  <div className="flex items-center gap-2">
+                                    <FormLabel>{field.label}</FormLabel>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{field.tooltip}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </div>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      placeholder={field.placeholder}
+                                      {...formField}
+                                      value={formField.value ?? ''}
+                                      onChange={(e) => {
+                                          const value = e.target.value;
+                                          formField.onChange(value === '' ? '' : Number(value));
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <Button
+                        type="submit"
+                        className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                        disabled={isLoadingPrediction}
+                      >
+                        {isLoadingPrediction && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Run Prediction
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+
+              <div className="sticky top-8">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="font-headline text-2xl">
+                      Prediction Results
+                    </CardTitle>
+                    <CardDescription>
+                      The model's confidence in the prediction.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col items-center justify-center gap-6 text-center">
+                    {isLoadingPrediction ? (
+                      <div className="flex flex-col items-center justify-center gap-4 py-8">
+                        <Loader2 className="h-16 w-16 animate-spin text-accent" />
+                        <p className="text-muted-foreground">Running prediction...</p>
+                      </div>
+                    ) : prediction ? (
+                      <>
+                        <CircularProgress progress={prediction.confidence} />
+                        <div className="flex flex-col gap-1">
+                          <h3 className="text-lg font-semibold text-foreground">
+                            Prediction: <span className="font-bold text-primary">{prediction.class}</span>
+                          </h3>
+                          <p className="text-muted-foreground">
+                            {modelType} Model Confidence
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+                        <p>Results will be displayed here.</p>
+                      </div>
+                    )}
+                  </CardContent>
+                  {prediction && (
+                    <CardFooter className="flex-col items-start gap-4">
+                      <CardTitle className="text-xl font-headline">
+                        Prediction Explanation
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground">{prediction.explanation}</p>
+                    </CardFooter>
+                  )}
+                </Card>
+              </div>
+            </div>
+          </TabsContent>
+          <TabsContent value="batch">
+            <BatchPrediction />
+          </TabsContent>
+        </Tabs>
       </main>
     </TooltipProvider>
   );

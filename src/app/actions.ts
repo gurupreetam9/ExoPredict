@@ -17,7 +17,7 @@ export async function populateParametersFromPrompt(
   return await populateParameters({ prompt, modelType });
 }
 
-export async function getPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number }> {
+export async function getPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const response = await fetch(`${apiUrl}/predict`, {
     method: 'POST',
@@ -33,6 +33,11 @@ export async function getPrediction(payload: { model: string; features: number[]
   }
 
   return response.json();
+}
+
+export async function getBatchPredictions(payloads: { model: string; features: number[] }[]): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }[]> {
+  const predictions = await Promise.all(payloads.map(payload => getPrediction(payload)));
+  return predictions;
 }
 
 
