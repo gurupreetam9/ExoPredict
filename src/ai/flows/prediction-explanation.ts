@@ -39,7 +39,7 @@ const prompt = ai.definePrompt({
   The user has provided the following information about the model prediction:
 
   Model Name: {{{modelName}}}
-  Input Features: {{#each (keys inputFeatures)}}{{{this}}}: {{{../inputFeatures.[this]}}} {{/each}}
+  Input Features: {{{json inputFeatures}}}
   Prediction Accuracy: {{{predictionAccuracy}}}%
 
   Based on this information, provide a concise explanation of what factors may have influenced the model's prediction.
