@@ -216,7 +216,7 @@ export default function Home() {
                         onChange={(e) => setPrompt(e.target.value)}
                         className="bg-card"
                       />
-                      <Button
+                       <Button
                         type="button"
                         onClick={handleGenerateParams}
                         disabled={isLoadingPrompt}
