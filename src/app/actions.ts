@@ -17,14 +17,14 @@ export async function populateParametersFromPrompt(
   return await populateParameters({ prompt, modelType });
 }
 
-export async function getPrediction(features: Record<string, any>): Promise<{ accuracy: number }> {
+export async function getPrediction(payload: Record<string, any>): Promise<{ accuracy: number }> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const response = await fetch(`${apiUrl}/predict`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(features),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {

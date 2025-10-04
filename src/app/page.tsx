@@ -295,7 +295,7 @@ export default function Home() {
                 <CardDescription>
                   The model's confidence in the prediction.
                 </CardDescription>
-              </header>
+              </CardHeader>
               <CardContent className="flex flex-col items-center justify-center gap-6 text-center">
                 {isLoadingPrediction ? (
                   <div className="flex flex-col items-center justify-center gap-4 py-8">
