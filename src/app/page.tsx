@@ -132,7 +132,8 @@ export default function Home() {
     setIsLoadingPrediction(true);
     setPrediction(null);
     try {
-      const { accuracy } = await getPrediction(values, modelType);
+      const payload = { ...values, modelType };
+      const { accuracy } = await getPrediction(payload, modelType);
       const { explanation } = await getExplanationForPrediction(
         modelType,
         values,
