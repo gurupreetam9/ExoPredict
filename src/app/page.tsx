@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { HelpCircle, Loader2 } from "lucide-react";
+import { useUser } from "@/firebase";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -46,16 +46,18 @@ import {
   KeplerSchema,
   TESSchema,
   FormFieldConfig,
+  TunedModel,
 } from "@/lib/definitions";
 import {
   getPrediction,
+  getTunedPrediction,
   getExplanationForPrediction,
+  getTunedModels,
 } from "@/app/actions";
-import Header from "@/components/header";
 import CircularProgress from "@/components/circular-progress";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BatchPrediction from "@/components/batch-prediction";
+import ModelTuning from "@/components/model-tuning";
 
 type Prediction = {
   class: string;
@@ -72,9 +74,12 @@ const getInitialValues = (fields: FormFieldConfig[]) => {
 
 export default function Home() {
   const [modelType, setModelType] = React.useState<ModelType>("Kepler");
+  const [selectedModel, setSelectedModel] = React.useState<string>("default");
+  const [tunedModels, setTunedModels] = React.useState<TunedModel[]>([]);
   const [isLoadingPrediction, setIsLoadingPrediction] = React.useState(false);
   const [prediction, setPrediction] = React.useState<Prediction | null>(null);
   const { toast } = useToast();
+  const { user, isUserLoading } = useUser();
 
   const formSchema = modelType === "Kepler" ? KeplerSchema : TESSchema;
   const fields: FormFieldConfig[] =
@@ -85,10 +90,31 @@ export default function Home() {
     defaultValues: getInitialValues(fields),
   });
 
+  const fetchTunedModels = React.useCallback(async () => {
+    try {
+      const models = await getTunedModels();
+      setTunedModels(models);
+    } catch (error) {
+      console.error("Failed to fetch tuned models", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Could not load tuned models.",
+      });
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    if(user) {
+        fetchTunedModels();
+    }
+  }, [user, fetchTunedModels]);
+  
   React.useEffect(() => {
     const newFields = modelType === "Kepler" ? keplerFields : tessFields;
     form.reset(getInitialValues(newFields));
     setPrediction(null);
+    setSelectedModel("default");
   }, [modelType, form]);
 
   const handleModelChange = (value: ModelType) => {
@@ -109,8 +135,9 @@ export default function Home() {
         model: modelType.toLowerCase(),
         features: features
       };
-
-      const { prediction, confidence } = await getPrediction(payload);
+      
+      const predictionFn = selectedModel === 'default' ? getPrediction : getTunedPrediction;
+      const { prediction, confidence } = await predictionFn(payload);
       
       const confidencePercent = confidence * 100;
 
@@ -134,15 +161,35 @@ export default function Home() {
     }
   };
 
+  if (isUserLoading) {
+      return (
+          <div className="flex h-screen items-center justify-center">
+              <Loader2 className="h-16 w-16 animate-spin" />
+          </div>
+      )
+  }
+
+  if (!user) {
+      return (
+          <div className="flex h-screen items-center justify-center">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Welcome to ExoPredict</CardTitle>
+                        <CardDescription>Please sign in to continue.</CardDescription>
+                    </CardHeader>
+                </Card>
+          </div>
+      )
+  }
+
   return (
     <TooltipProvider>
-      <main className="container mx-auto min-h-screen p-4 sm:p-6 lg:p-8">
-        <Header />
-
+      <main>
         <Tabs defaultValue="single" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="single">Single Prediction</TabsTrigger>
             <TabsTrigger value="batch">Batch Prediction</TabsTrigger>
+            <TabsTrigger value="tuning">Model Tuning</TabsTrigger>
           </TabsList>
           <TabsContent value="single">
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start mt-4">
@@ -163,12 +210,9 @@ export default function Home() {
                       className="space-y-8"
                     >
                       <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name="modelType"
-                          render={() => (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <FormItem>
-                              <FormLabel>Select Model</FormLabel>
+                              <FormLabel>Select Base Model</FormLabel>
                               <Select
                                 onValueChange={(v) => handleModelChange(v as ModelType)}
                                 defaultValue={modelType}
@@ -176,7 +220,7 @@ export default function Home() {
                               >
                                 <FormControl>
                                   <SelectTrigger>
-                                    <SelectValue placeholder="Select a model" />
+                                    <SelectValue placeholder="Select a base model" />
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
@@ -186,8 +230,26 @@ export default function Home() {
                               </Select>
                               <FormMessage />
                             </FormItem>
-                          )}
-                        />
+                             <FormItem>
+                                <FormLabel>Select Model Version</FormLabel>
+                                <Select onValueChange={setSelectedModel} value={selectedModel}>
+                                    <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a version" />
+                                    </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="default">Default</SelectItem>
+                                        {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
+                                            <SelectItem key={m.model_id} value={m.model_id}>
+                                                Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                        </div>
+
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {fields.map((field) => (
@@ -289,7 +351,10 @@ export default function Home() {
             </div>
           </TabsContent>
           <TabsContent value="batch">
-            <BatchPrediction />
+            <BatchPrediction tunedModels={tunedModels} />
+          </TabsContent>
+           <TabsContent value="tuning">
+            <ModelTuning onModelTuned={fetchTunedModels} tunedModels={tunedModels} />
           </TabsContent>
         </Tabs>
       </main>

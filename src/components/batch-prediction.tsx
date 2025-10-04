@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import { useToast } from '@/hooks/use-toast';
-import { ModelType, keplerFields, tessFields } from '@/lib/definitions';
+import { ModelType, keplerFields, tessFields, TunedModel } from '@/lib/definitions';
 import { getBatchPredictions } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Upload, Download } from 'lucide-react';
+import { FormControl, FormItem, FormLabel } from './ui/form';
 
 type DataRow = Record<string, string | number>;
 type ResultRow = DataRow & {
@@ -33,8 +34,13 @@ type ResultRow = DataRow & {
     confidence: number;
 };
 
-const BatchPrediction = () => {
+interface BatchPredictionProps {
+    tunedModels: TunedModel[];
+}
+
+const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
     const [modelType, setModelType] = useState<ModelType>('Kepler');
+    const [selectedModel, setSelectedModel] = useState<string>("default");
     const [file, setFile] = useState<File | null>(null);
     const [data, setData] = useState<DataRow[]>([]);
     const [results, setResults] = useState<ResultRow[]>([]);
@@ -116,7 +122,8 @@ const BatchPrediction = () => {
             });
 
             try {
-                const batchResults = await getBatchPredictions(payloads);
+                const useTuned = selectedModel !== 'default';
+                const batchResults = await getBatchPredictions(payloads, useTuned);
                 const newProcessedResults = batch.map((originalRow, index) => ({
                     ...originalRow,
                     prediction: batchResults[index].prediction,
@@ -149,7 +156,7 @@ const BatchPrediction = () => {
             dataToDownload = results;
         } else {
             dataToDownload = results.map(row => {
-                const selectedData: ResultRow = { prediction: row.prediction, confidence: row.confidence };
+                const selectedData: Partial<ResultRow> = { prediction: row.prediction, confidence: row.confidence };
                 for (const key of selectedFeatureNames) {
                     selectedData[key] = row[key];
                 }
@@ -173,10 +180,10 @@ const BatchPrediction = () => {
                 <CardDescription>Upload a CSV or XLSX file to get predictions for multiple exoplanet candidates at once.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="flex-1 space-y-2">
-                         <Label>Select Model</Label>
-                         <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <FormItem>
+                        <FormLabel>Select Base Model</FormLabel>
+                        <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType}>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select a model" />
                             </SelectTrigger>
@@ -185,12 +192,31 @@ const BatchPrediction = () => {
                                 <SelectItem value="TESS">TESS</SelectItem>
                             </SelectContent>
                         </Select>
-                    </div>
-                    <div className="flex-1 space-y-2">
-                        <Label htmlFor="file-upload">Upload File</Label>
-                        <Input id="file-upload" type="file" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
-                    </div>
+                    </FormItem>
+                    <FormItem>
+                        <FormLabel>Select Model Version</FormLabel>
+                        <Select onValueChange={setSelectedModel} value={selectedModel}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a version" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                <SelectItem value="default">Default</SelectItem>
+                                {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
+                                    <SelectItem key={m.model_id} value={m.model_id}>
+                                        Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </FormItem>
                 </div>
+                 <div className="space-y-2">
+                    <Label htmlFor="file-upload">Upload File</Label>
+                    <Input id="file-upload" type="file" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+                </div>
+
 
                 <Button onClick={processFile} disabled={!file || isLoading} className="w-full sm:w-auto">
                     {isLoading ? (

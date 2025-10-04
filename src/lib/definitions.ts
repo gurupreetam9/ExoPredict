@@ -9,6 +9,14 @@ export interface FormFieldConfig {
   tooltip: string;
 }
 
+export interface TunedModel {
+    model_name: string;
+    model_id: string;
+    hyperparameters: any;
+    accuracy: number;
+    created_at: string;
+}
+
 export const keplerFields: FormFieldConfig[] = [
   { name: 'koi_period', label: 'Orbital Period', placeholder: 'e.g., 4.57', tooltip: 'Orbital Period (days)' },
   { name: 'koi_time0bk', label: 'Time of First Transit', placeholder: 'e.g., 133.77', tooltip: 'Time of First Transit (BKJD)' },
