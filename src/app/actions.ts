@@ -17,15 +17,22 @@ export async function populateParametersFromPrompt(
   return await populateParameters({ prompt, modelType });
 }
 
-export async function getPrediction(features: Record<string, number>): Promise<{ accuracy: number }> {
-  // Mock API call
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Simulate some logic with features if needed
-      const accuracy = Math.floor(Math.random() * (99 - 70 + 1) + 70);
-      resolve({ accuracy });
-    }, 1500);
+export async function getPrediction(features: Record<string, number>, modelType: ModelType): Promise<{ accuracy: number }> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
+  const response = await fetch(`${apiUrl}/predict`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...features, modelType }),
   });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Prediction request failed');
+  }
+
+  return response.json();
 }
 
 export async function getExplanationForPrediction(
