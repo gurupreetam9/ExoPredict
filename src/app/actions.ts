@@ -17,7 +17,7 @@ export async function populateParametersFromPrompt(
   return await populateParameters({ prompt, modelType });
 }
 
-export async function getPrediction(features: Record<string, any>, modelType: ModelType): Promise<{ accuracy: number }> {
+export async function getPrediction(features: Record<string, any>): Promise<{ accuracy: number }> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
   const response = await fetch(`${apiUrl}/predict`, {
     method: 'POST',
@@ -45,6 +45,11 @@ export async function getExplanationForPrediction(
   for (const key in inputFeatures) {
     if (typeof inputFeatures[key] === 'number') {
       numberFeatures[key] = inputFeatures[key];
+    } else if (typeof inputFeatures[key] === 'string') {
+        const parsed = parseFloat(inputFeatures[key]);
+        if (!isNaN(parsed)) {
+            numberFeatures[key] = parsed;
+        }
     }
   }
 

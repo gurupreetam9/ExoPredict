@@ -90,11 +90,11 @@ export default function Home() {
   React.useEffect(() => {
     const newFields = modelType === "Kepler" ? keplerFields : tessFields;
     form.reset(getInitialValues(newFields));
+    setPrediction(null);
   }, [modelType, form]);
 
   const handleModelChange = (value: ModelType) => {
     setModelType(value);
-    setPrediction(null);
   };
 
   const handleGenerateParams = async () => {
@@ -110,7 +110,11 @@ export default function Home() {
     try {
       const result = await populateParametersFromPrompt(prompt, modelType);
       if (result) {
-        form.reset(result);
+        const parsedResult = Object.entries(result).reduce((acc, [key, value]) => {
+          acc[key] = value;
+          return acc;
+        }, {} as Record<string, any>);
+        form.reset(parsedResult);
         toast({
           title: "Parameters Generated",
           description: "The form has been populated with AI-generated values.",
@@ -133,7 +137,7 @@ export default function Home() {
     setPrediction(null);
     try {
       const payload = { ...values, modelType };
-      const { accuracy } = await getPrediction(payload, modelType);
+      const { accuracy } = await getPrediction(payload);
       const { explanation } = await getExplanationForPrediction(
         modelType,
         values,
@@ -142,10 +146,11 @@ export default function Home() {
       setPrediction({ accuracy, explanation });
     } catch (error) {
       console.error(error);
+      const errorMessage = error instanceof Error ? error.message : "An error occurred while making the prediction.";
       toast({
         variant: "destructive",
         title: "Prediction Failed",
-        description: "An error occurred while making the prediction.",
+        description: errorMessage,
       });
     } finally {
       setIsLoadingPrediction(false);
@@ -183,6 +188,7 @@ export default function Home() {
                           <Select
                             onValueChange={(v) => handleModelChange(v as ModelType)}
                             defaultValue={modelType}
+                            value={modelType}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -250,8 +256,10 @@ export default function Home() {
                                   type="number"
                                   placeholder={field.placeholder}
                                   {...formField}
+                                   value={formField.value ?? ''}
                                   onChange={(e) => {
-                                      formField.onChange(e.target.value === '' ? '' : Number(e.target.value));
+                                      const value = e.target.value;
+                                      formField.onChange(value === '' ? '' : Number(value));
                                   }}
                                 />
                               </FormControl>
@@ -286,7 +294,7 @@ export default function Home() {
                 <CardDescription>
                   The model's confidence in the prediction.
                 </CardDescription>
-              </CardHeader>
+              </header>
               <CardContent className="flex flex-col items-center justify-center gap-6 text-center">
                 {isLoadingPrediction ? (
                   <div className="flex flex-col items-center justify-center gap-4 py-8">
