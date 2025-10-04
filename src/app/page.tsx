@@ -59,7 +59,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 
 type Prediction = {
-  accuracy: number;
+  class: string;
+  confidence: number;
   explanation: string;
 };
 
@@ -135,15 +136,29 @@ export default function Home() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoadingPrediction(true);
     setPrediction(null);
+
     try {
-      const payload = { ...values, modelType };
-      const { accuracy } = await getPrediction(payload);
+      const features = fields.map(field => {
+        const val = values[field.name];
+        return typeof val === "string" ? parseFloat(val) : val;
+      });
+
+      const payload = {
+        model: modelType.toLowerCase(),
+        features: features
+      };
+
+      const { prediction, confidence } = await getPrediction(payload);
+      
+      const confidencePercent = confidence * 100;
+
       const { explanation } = await getExplanationForPrediction(
         modelType,
         values,
-        accuracy
+        confidencePercent
       );
-      setPrediction({ accuracy, explanation });
+
+      setPrediction({ class: prediction, confidence: confidencePercent, explanation });
     } catch (error) {
       console.error(error);
       const errorMessage = error instanceof Error ? error.message : "An error occurred while making the prediction.";
@@ -156,6 +171,8 @@ export default function Home() {
       setIsLoadingPrediction(false);
     }
   };
+
+
 
   return (
     <TooltipProvider>
@@ -304,10 +321,15 @@ export default function Home() {
                   </div>
                 ) : prediction ? (
                   <>
-                    <CircularProgress progress={prediction.accuracy} />
-                    <h3 className="text-lg font-semibold text-foreground">
-                      {modelType} Model Accuracy
-                    </h3>
+                    <CircularProgress progress={prediction.confidence} />
+                    <div className="flex flex-col gap-1">
+                      <h3 className="text-lg font-semibold text-foreground">
+                        Prediction: <span className="font-bold text-primary">{prediction.class}</span>
+                      </h3>
+                      <p className="text-muted-foreground">
+                        {modelType} Model Confidence
+                      </p>
+                    </div>
                   </>
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
