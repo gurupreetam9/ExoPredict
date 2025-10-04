@@ -33,12 +33,15 @@ def predict():
 
     pred_class_index = np.argmax(probs[0])
     pred_class = le.inverse_transform([pred_class_index])[0]
+    
+    confidence_val = float(probs[0][pred_class_index])
+    probabilities_dict = {k: float(v) for k, v in zip(le.classes_, probs[0])}
 
     return jsonify({
         "model": model_name,
         "prediction": pred_class,
-        "confidence": probs[0][pred_class_index],
-        "probabilities": dict(zip(le.classes_, probs[0])),
+        "confidence": confidence_val,
+        "probabilities": probabilities_dict,
         "features": features
     })
 
