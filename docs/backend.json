@@ -1,0 +1,178 @@
+{
+  "entities": {
+    "User": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "User",
+      "type": "object",
+      "description": "Represents a user of the ExoPredict application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the User entity."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the user."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "name"
+      ]
+    },
+    "Model": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Model",
+      "type": "object",
+      "description": "Represents a machine learning model used for exoplanet prediction.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Model entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the model (e.g., Kepler, TESS)."
+        },
+        "algorithm": {
+          "type": "string",
+          "description": "The underlying algorithm used in the model (e.g., RandomForest, SVM)."
+        },
+        "hyperparameters": {
+          "type": "string",
+          "description": "JSON string containing the hyperparameters used to train the model."
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "Accuracy of the trained model.",
+          "format": "number"
+        },
+        "isDefault": {
+          "type": "boolean",
+          "description": "Indicates if this is the default model selected by the server."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "algorithm"
+      ]
+    },
+    "Prediction": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Prediction",
+      "type": "object",
+      "description": "Represents a single prediction made by a model.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Prediction entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to User. (Relationship: User 1:N Prediction)"
+        },
+        "modelId": {
+          "type": "string",
+          "description": "Reference to Model. (Relationship: Model 1:N Prediction)"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the prediction was made.",
+          "format": "date-time"
+        },
+        "inputFeatures": {
+          "type": "string",
+          "description": "JSON string containing the input features used for the prediction."
+        },
+        "result": {
+          "type": "number",
+          "description": "The predicted result (e.g., probability of exoplanet existence).",
+          "format": "number"
+        },
+        "accuracy": {
+          "type": "number",
+          "description": "The accuracy of the model prediction.",
+          "format": "number"
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "modelId",
+        "timestamp",
+        "inputFeatures",
+        "result"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "entityName": "User",
+          "schema": {
+            "$ref": "#/backend/entities/User"
+          },
+          "description": "Stores user profiles. Access is restricted to the user themselves.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/models/{modelId}",
+        "definition": {
+          "entityName": "Model",
+          "schema": {
+            "$ref": "#/backend/entities/Model"
+          },
+          "description": "Stores machine learning model metadata. Includes the `isDefault` field to indicate the server-selected default model.",
+          "params": [
+            {
+              "name": "modelId",
+              "description": "The unique identifier of the model."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/predictions/{predictionId}",
+        "definition": {
+          "entityName": "Prediction",
+          "schema": {
+            "$ref": "#/backend/entities/Prediction"
+          },
+          "description": "Stores prediction data for each user. Includes `userId` and `modelId` references.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user."
+            },
+            {
+              "name": "predictionId",
+              "description": "The unique identifier of the prediction."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "This Firestore data structure is designed to support the ExoPredict application, focusing on user authentication, model selection, and prediction storage. The structure prioritizes authorization independence and secure data access.\n\n*   **/users/{userId}**: Stores user profiles. Access is restricted to the user themselves.\n*   **/models/{modelId}**: Stores pre-trained model metadata.  The `isDefault` field facilitates easy retrieval of the server-selected default model. This collection is publicly readable to allow model selection by all users.\n*   **/users/{userId}/predictions/{predictionId}**: Stores prediction data associated with each user. Path-based ownership ensures that only the user can access their predictions. The `modelId` field links each prediction to a specific model.\n\nThis structure achieves Authorization Independence by avoiding hierarchical authorization dependencies. Each collection has clearly defined access rules based on `request.auth.uid` and denormalized data where necessary (e.g., predictions are stored under the user's path). This ensures atomic operations and simplifies security rule debugging. Segregation of data based on ownership (/users/{userId}/predictions/{predictionId}) and public availability (models/{modelId}) supports secure `list` operations, fulfilling the QAPs requirement."
+  }
+}
