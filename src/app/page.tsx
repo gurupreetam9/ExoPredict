@@ -32,7 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -49,7 +48,6 @@ import {
   FormFieldConfig,
 } from "@/lib/definitions";
 import {
-  populateParametersFromPrompt,
   getPrediction,
   getExplanationForPrediction,
 } from "@/app/actions";
@@ -74,10 +72,8 @@ const getInitialValues = (fields: FormFieldConfig[]) => {
 
 export default function Home() {
   const [modelType, setModelType] = React.useState<ModelType>("Kepler");
-  const [isLoadingPrompt, setIsLoadingPrompt] = React.useState(false);
   const [isLoadingPrediction, setIsLoadingPrediction] = React.useState(false);
   const [prediction, setPrediction] = React.useState<Prediction | null>(null);
-  const [prompt, setPrompt] = React.useState("");
   const { toast } = useToast();
 
   const formSchema = modelType === "Kepler" ? KeplerSchema : TESSchema;
@@ -97,41 +93,6 @@ export default function Home() {
 
   const handleModelChange = (value: ModelType) => {
     setModelType(value);
-  };
-
-  const handleGenerateParams = async () => {
-    if (!prompt) {
-      toast({
-        variant: "destructive",
-        title: "Prompt is empty",
-        description: "Please enter a description to generate parameters.",
-      });
-      return;
-    }
-    setIsLoadingPrompt(true);
-    try {
-      const result = await populateParametersFromPrompt(prompt, modelType);
-      if (result) {
-        const parsedResult = Object.entries(result).reduce((acc, [key, value]) => {
-          acc[key] = value;
-          return acc;
-        }, {} as Record<string, any>);
-        form.reset(parsedResult);
-        toast({
-          title: "Parameters Generated",
-          description: "The form has been populated with AI-generated values.",
-        });
-      }
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "Generation Failed",
-        description: "Could not generate parameters from the prompt.",
-      });
-    } finally {
-      setIsLoadingPrompt(false);
-    }
   };
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
@@ -227,33 +188,6 @@ export default function Home() {
                             </FormItem>
                           )}
                         />
-
-                        <div className="space-y-2">
-                          <Label htmlFor="ai-prompt">
-                            Generate Parameters with AI
-                          </Label>
-                          <Textarea
-                            id="ai-prompt"
-                            placeholder="e.g., 'A hot Jupiter orbiting a sun-like star very closely...'"
-                            value={prompt}
-                            onChange={(e) => setPrompt(e.target.value)}
-                            className="bg-card"
-                          />
-                          <Button
-                            type="button"
-                            onClick={handleGenerateParams}
-                            disabled={isLoadingPrompt}
-                            className="bg-primary hover:bg-primary/90"
-                          >
-                            {isLoadingPrompt && (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            )}
-                            Generate with AI
-                          </Button>
-                          <FormDescription>
-                            Describe a hypothetical exoplanet, and AI will fill in the parameters for you.
-                          </FormDescription>
-                        </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                           {fields.map((field) => (

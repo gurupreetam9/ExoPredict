@@ -1,21 +1,10 @@
 "use server";
 
 import {
-  populateParameters,
-  ParameterPopulationOutput,
-} from "@/ai/flows/prompt-assisted-parameter-entry";
-import {
   getPredictionExplanation,
   PredictionExplanationOutput,
 } from "@/ai/flows/prediction-explanation";
 import { ModelType } from "@/lib/definitions";
-
-export async function populateParametersFromPrompt(
-  prompt: string,
-  modelType: ModelType
-): Promise<ParameterPopulationOutput> {
-  return await populateParameters({ prompt, modelType });
-}
 
 export async function getPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
