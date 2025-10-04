@@ -28,8 +28,15 @@ export async function getPrediction(payload: { model: string; features: number[]
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.error || 'Prediction request failed');
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Prediction request failed');
+    } else {
+      const errorText = await response.text();
+      console.error("Prediction API returned non-JSON error:", errorText);
+      throw new Error('Prediction request failed: The server returned an unexpected error.');
+    }
   }
 
   return response.json();
