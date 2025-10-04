@@ -102,6 +102,14 @@ const BatchPrediction = () => {
             const payloads = batch.map(row => {
                 const features = fieldNames.map(name => {
                     const val = row[name];
+                    if (val === undefined || val === null) {
+                        toast({
+                            variant: 'destructive',
+                            title: 'Missing Data',
+                            description: `Column "${name}" is missing in the uploaded file.`,
+                        });
+                        throw new Error(`Missing column: ${name}`);
+                    }
                     return typeof val === 'string' ? parseFloat(val) : (val as number);
                 });
                 return { model: modelType.toLowerCase(), features };
@@ -131,11 +139,29 @@ const BatchPrediction = () => {
         setIsLoading(false);
     };
 
-    const downloadResults = () => {
-        const ws = XLSX.utils.json_to_sheet(results);
+    const downloadResults = (includeAllFeatures: boolean) => {
+        const fields = modelType === 'Kepler' ? keplerFields : tessFields;
+        const selectedFeatureNames = fields.map(f => f.name);
+
+        let dataToDownload;
+
+        if (includeAllFeatures) {
+            dataToDownload = results;
+        } else {
+            dataToDownload = results.map(row => {
+                const selectedData: ResultRow = { prediction: row.prediction, confidence: row.confidence };
+                for (const key of selectedFeatureNames) {
+                    selectedData[key] = row[key];
+                }
+                return selectedData;
+            });
+        }
+
+        const ws = XLSX.utils.json_to_sheet(dataToDownload);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Predictions');
-        XLSX.writeFile(wb, 'prediction_results.csv');
+        const fileName = `prediction_results_${includeAllFeatures ? 'all_columns' : 'selected_columns'}.xlsx`;
+        XLSX.writeFile(wb, fileName);
     };
 
     const allHeaders = (results.length > 0 ? Object.keys(results[0]) : []);
@@ -185,12 +211,18 @@ const BatchPrediction = () => {
                 
                 {results.length > 0 && !isLoading && (
                     <div className="space-y-4">
-                        <div className="flex justify-between items-center">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <h3 className="text-lg font-medium">Prediction Results</h3>
-                            <Button onClick={downloadResults} variant="outline" size="sm">
-                                <Download className="mr-2 h-4 w-4" />
-                                Download Results
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button onClick={() => downloadResults(false)} variant="outline" size="sm">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Selected
+                                </Button>
+                                <Button onClick={() => downloadResults(true)} variant="outline" size="sm">
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download All
+                                </Button>
+                            </div>
                         </div>
                         <div className="max-h-[400px] overflow-auto rounded-md border">
                             <Table>
