@@ -63,6 +63,13 @@ type Prediction = {
   explanation: string;
 };
 
+const getInitialValues = (fields: FormFieldConfig[]) => {
+  return fields.reduce((acc, field) => {
+    acc[field.name] = "";
+    return acc;
+  }, {} as Record<string, string | number>);
+};
+
 export default function Home() {
   const [modelType, setModelType] = React.useState<ModelType>("Kepler");
   const [isLoadingPrompt, setIsLoadingPrompt] = React.useState(false);
@@ -72,13 +79,21 @@ export default function Home() {
   const { toast } = useToast();
 
   const formSchema = modelType === "Kepler" ? KeplerSchema : TESSchema;
+  const fields: FormFieldConfig[] =
+    modelType === "Kepler" ? keplerFields : tessFields;
+
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
+    defaultValues: getInitialValues(fields),
   });
+
+  React.useEffect(() => {
+    const newFields = modelType === "Kepler" ? keplerFields : tessFields;
+    form.reset(getInitialValues(newFields));
+  }, [modelType, form]);
 
   const handleModelChange = (value: ModelType) => {
     setModelType(value);
-    form.reset();
     setPrediction(null);
   };
 
@@ -135,9 +150,6 @@ export default function Home() {
       setIsLoadingPrediction(false);
     }
   };
-
-  const fields: FormFieldConfig[] =
-    modelType === "Kepler" ? keplerFields : tessFields;
 
   return (
     <TooltipProvider>
