@@ -44,7 +44,7 @@ export async function getTunedPrediction(payload: { model: string; features: num
 
 export async function getBatchPredictions(payloads: { model: string; features: number[] }[], useTuned: boolean): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }[]> {
   const predictionFn = useTuned ? getTunedPrediction : getPrediction;
-  const predictions = await Promise.all(payloads.map(payload => predictionFn(payload)));
+  const predictions = await Promise.all(payloads.map(payload => predictionFn(payload as any)));
   return predictions;
 }
 
@@ -84,7 +84,7 @@ export async function tuneModel(
         gb_n_estimators: string;
         gb_max_depth: string;
     }
-): Promise<{ message: string, model_name: string, hyperparameters: any, accuracy: number, model_id: string }> {
+): Promise<{ message: string, model_name: string, best_params: any, accuracy: number, model_id: string }> {
     
     const parseStringList = (str: string) => str.split(',').map(s => s.trim()).filter(s => s).map(Number);
 

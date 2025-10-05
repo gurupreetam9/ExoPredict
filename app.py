@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import StackingClassifier
 from xgboost import XGBClassifier
+from bson import ObjectId
 
 load_dotenv()
 
@@ -74,7 +75,7 @@ def tune_model():
     if not model_name:
         return jsonify({"error": "Missing model name"}), 400
 
-    if not user_param_grid or not isinstance(user_param_grid, dict):
+    if not user_param_grid or not isinstance(user_param_grid, dict) or not user_param_grid:
         return jsonify({"error": "Missing or invalid hyperparameters"}), 400
 
     # Load training data from disk
@@ -109,13 +110,13 @@ def tune_model():
     model_bytes.seek(0)
 
     # Save tuned model to GridFS
-    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_stack_model.joblib")
+    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_stack_{datetime.utcnow().isoformat()}.joblib")
 
     # Save metadata in DB
     db.models.insert_one({
         "model_name": model_name,
         "model_id": model_id,
-        "hyperparameters": grid_search.best_params_,
+        "best_params": grid_search.best_params_,
         "accuracy": grid_search.best_score_,
         "created_at": datetime.utcnow()
     })
@@ -136,24 +137,27 @@ def tune_model():
 @app.route("/predict_tuned", methods=["POST"])
 def predict_tuned():
     data = request.json
-    model_name = data.get("model")
+    model_id_str = data.get("model") # Here, 'model' is the model_id from MongoDB
     features = data.get("features")
 
-    if not model_name or not features:
-        return jsonify({"error": "Missing model name or features"}), 400
+    if not model_id_str or not features:
+        return jsonify({"error": "Missing model ID or features"}), 400
 
-    # Load latest tuned model from MongoDB
-    tuned_model_data = db.models.find({"model_name": model_name}).sort("created_at", -1).limit(1)
-    tuned_model_data = list(tuned_model_data)
+    # Find the model's metadata to know if it's kepler or tess
+    model_metadata = db.models.find_one({"model_id": ObjectId(model_id_str)})
 
-    if not tuned_model_data:
-        return jsonify({"error": "No tuned model found"}), 404
+    if not model_metadata:
+        return jsonify({"error": "Tuned model metadata not found"}), 404
 
-    model_id = tuned_model_data[0]["model_id"]
-    model_file = fs.get(model_id)
+    model_name = model_metadata.get("model_name") # 'kepler' or 'tess'
+    if not model_name:
+         return jsonify({"error": "Model name (kepler/tess) not found in tuned model metadata"}), 500
+    
+    # Load model from GridFS
+    model_file = fs.get(ObjectId(model_id_str))
     model = joblib.load(model_file)
 
-    # Load scaler and encoder from disk
+    # Load the correct scaler and encoder based on the model name
     scaler = joblib.load(f"{model_name}_scaler.pkl")
     le = joblib.load(f"{model_name}_label_encoder.pkl")
 
@@ -166,7 +170,7 @@ def predict_tuned():
     probabilities_dict = {k: float(v) for k, v in zip(le.classes_, probs[0])}
 
     return jsonify({
-        "model": model_name,
+        "model": model_id_str, # Return the id of the tuned model
         "prediction": pred_class,
         "confidence": confidence_val,
         "probabilities": probabilities_dict,
@@ -179,9 +183,9 @@ def predict_tuned():
 # ---------------------------
 @app.route("/tuned_models", methods=["GET"])
 def get_tuned_models():
-    models = list(db.models.find())
+    models = list(db.models.find().sort("created_at", -1))
 
-    # Convert ObjectId to string
+    # Convert ObjectId to string for JSON serialization
     for model in models:
         model["_id"] = str(model["_id"])
         if "model_id" in model:

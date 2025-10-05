@@ -54,10 +54,15 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
-            setFile(e.target.files[0]);
+            const selectedFile = e.target.files[0];
+            setFile(selectedFile);
             setData([]);
             setResults([]);
             setProgress(0);
+            toast({
+                title: 'File Selected',
+                description: `${selectedFile.name} is ready to be processed.`,
+            });
         }
     };
 
@@ -71,6 +76,7 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
             return;
         }
 
+        setIsLoading(true);
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
@@ -80,8 +86,8 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
                 const jsonData = XLSX.utils.sheet_to_json(worksheet) as DataRow[];
                 setData(jsonData);
                 toast({
-                    title: 'File processed',
-                    description: `${jsonData.length} rows loaded successfully.`,
+                    title: 'File Processed',
+                    description: `${jsonData.length} rows loaded. Starting predictions...`,
                 });
                 runPredictions(jsonData);
             } catch (error) {
@@ -91,42 +97,67 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
                     title: 'File processing error',
                     description: 'Could not read data from the file. Please ensure it is a valid CSV or XLSX file.',
                 });
+                setIsLoading(false);
             }
+        };
+        reader.onerror = () => {
+            toast({
+                variant: 'destructive',
+                title: 'File Read Error',
+                description: 'There was an error reading the file.',
+            });
+            setIsLoading(false);
         };
         reader.readAsBinaryString(file);
     };
 
     const runPredictions = async (rows: DataRow[]) => {
-        setIsLoading(true);
         setResults([]);
         setProgress(0);
 
         const fields = modelType === 'Kepler' ? keplerFields : tessFields;
         const fieldNames = fields.map(f => f.name);
 
+        // Validate that all required columns exist in the first row
+        if (rows.length > 0) {
+            const firstRowKeys = Object.keys(rows[0]);
+            const missingColumns = fieldNames.filter(name => !firstRowKeys.includes(name));
+            if (missingColumns.length > 0) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Missing Required Columns',
+                    description: `Your file is missing the following columns: ${missingColumns.join(', ')}`,
+                });
+                setIsLoading(false);
+                return;
+            }
+        } else {
+             toast({
+                variant: 'destructive',
+                title: 'Empty File',
+                description: `The file has no data to process.`,
+            });
+            setIsLoading(false);
+            return;
+        }
+
         const batchSize = 10;
         let processedResults: ResultRow[] = [];
+
+        const useTuned = selectedModel !== 'default';
 
         for (let i = 0; i < rows.length; i += batchSize) {
             const batch = rows.slice(i, i + batchSize);
             const payloads = batch.map(row => {
                 const features = fieldNames.map(name => {
                     const val = row[name];
-                    if (val === undefined || val === null) {
-                        toast({
-                            variant: 'destructive',
-                            title: 'Missing Data',
-                            description: `Column "${name}" is missing in the uploaded file.`,
-                        });
-                        throw new Error(`Missing column: ${name}`);
-                    }
                     return typeof val === 'string' ? parseFloat(val) : (val as number);
                 });
-                return { model: modelType.toLowerCase(), features };
+                const modelIdentifier = useTuned ? selectedModel : modelType.toLowerCase();
+                return { model: modelIdentifier, features };
             });
 
             try {
-                const useTuned = selectedModel !== 'default';
                 const batchResults = await getBatchPredictions(payloads, useTuned);
                 const newProcessedResults = batch.map((originalRow, index) => ({
                     ...originalRow,
@@ -137,30 +168,42 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
                 setResults(processedResults);
             } catch (error) {
                  console.error('Error during batch prediction:', error);
+                 const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
                  toast({
                      variant: 'destructive',
                      title: 'Prediction Error',
-                     description: `An error occurred during prediction for batch starting at row ${i + 1}.`,
+                     description: `Batch starting at row ${i + 1} failed: ${errorMessage}`,
                  });
+                 setIsLoading(false);
+                 return; // Stop further processing on error
             }
 
             setProgress(((i + batch.length) / rows.length) * 100);
         }
 
         setIsLoading(false);
+        toast({
+            title: 'Predictions Complete',
+            description: `All ${rows.length} rows have been processed.`,
+        });
     };
 
     const downloadResults = (includeAllFeatures: boolean) => {
         const fields = modelType === 'Kepler' ? keplerFields : tessFields;
         const selectedFeatureNames = fields.map(f => f.name);
 
-        let dataToDownload;
+        let dataToDownload: Partial<ResultRow>[];
 
         if (includeAllFeatures) {
+            // Keep all original columns plus prediction/confidence
             dataToDownload = results;
         } else {
+            // Include only the model's features plus prediction/confidence
             dataToDownload = results.map(row => {
-                const selectedData: Partial<ResultRow> = { prediction: row.prediction, confidence: row.confidence };
+                const selectedData: Partial<ResultRow> = { 
+                    prediction: row.prediction, 
+                    confidence: row.confidence 
+                };
                 for (const key of selectedFeatureNames) {
                     selectedData[key] = row[key];
                 }
@@ -171,7 +214,7 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
         const ws = XLSX.utils.json_to_sheet(dataToDownload);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Predictions');
-        const fileName = `prediction_results_${includeAllFeatures ? 'all_columns' : 'selected_columns'}.xlsx`;
+        const fileName = `prediction_results_${modelType}_${includeAllFeatures ? 'all_columns' : 'selected_columns'}.xlsx`;
         XLSX.writeFile(wb, fileName);
     };
 
@@ -185,44 +228,46 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
             </CardHeader>
             <CardContent className="space-y-6">
                 <Form {...form}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <FormItem>
-                            <FormLabel>Select Base Model</FormLabel>
-                            <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType}>
-                                <FormControl>
+                    <form className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <FormItem>
+                                <FormLabel>Select Base Model</FormLabel>
+                                <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType} disabled={isLoading}>
+                                    <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select a model" />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="Kepler">Kepler</SelectItem>
+                                        <SelectItem value="TESS">TESS</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                            <FormItem>
+                                <FormLabel>Select Model Version</FormLabel>
+                                <Select onValueChange={setSelectedModel} value={selectedModel} disabled={isLoading}>
+                                    <FormControl>
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select a model" />
+                                        <SelectValue placeholder="Select a version" />
                                     </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    <SelectItem value="Kepler">Kepler</SelectItem>
-                                    <SelectItem value="TESS">TESS</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </FormItem>
-                        <FormItem>
-                            <FormLabel>Select Model Version</FormLabel>
-                            <Select onValueChange={setSelectedModel} value={selectedModel}>
-                                <FormControl>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a version" />
-                                </SelectTrigger>
-                                </FormControl>
-                                <SelectContent>
-                                    <SelectItem value="default">Default</SelectItem>
-                                    {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
-                                        <SelectItem key={m.model_id} value={m.model_id}>
-                                            Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </FormItem>
-                    </div>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="default">Default</SelectItem>
+                                        {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
+                                            <SelectItem key={m.model_id} value={m.model_id}>
+                                                Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </FormItem>
+                        </div>
+                    </form>
                 </Form>
                  <div className="space-y-2">
                     <Label htmlFor="file-upload">Upload File</Label>
-                    <Input id="file-upload" type="file" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+                    <Input id="file-upload" type="file" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" disabled={isLoading}/>
                 </div>
 
 
@@ -250,11 +295,11 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
                             <div className="flex gap-2">
                                 <Button onClick={() => downloadResults(false)} variant="outline" size="sm">
                                     <Download className="mr-2 h-4 w-4" />
-                                    Download Selected
+                                    Download Selected Features
                                 </Button>
                                 <Button onClick={() => downloadResults(true)} variant="outline" size="sm">
                                     <Download className="mr-2 h-4 w-4" />
-                                    Download All
+                                    Download All Features
                                 </Button>
                             </div>
                         </div>

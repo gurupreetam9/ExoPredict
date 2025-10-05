@@ -136,8 +136,14 @@ export default function Home() {
         features: features
       };
       
-      const predictionFn = selectedModel === 'default' ? getPrediction : getTunedPrediction;
-      const { prediction, confidence } = await predictionFn(payload);
+      const useTunedModel = selectedModel !== 'default';
+      
+      const predictionFn = useTunedModel ? getTunedPrediction : getPrediction;
+
+      // The payload for the tuned prediction needs the modelId (which is stored in selectedModel)
+      const finalPayload = useTunedModel ? { ...payload, model: selectedModel } : payload;
+
+      const { prediction, confidence } = await predictionFn(finalPayload as any);
       
       const confidencePercent = confidence * 100;
 
