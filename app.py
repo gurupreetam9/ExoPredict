@@ -163,8 +163,16 @@ def predict_tuned():
 # ---------------------------
 @app.route("/tuned_models", methods=["GET"])
 def get_tuned_models():
-    models = list(db.models.find({}, {"_id": 0}))
+    models = list(db.models.find())
+
+    # Convert ObjectId to string
+    for model in models:
+        model["_id"] = str(model["_id"])
+        if "model_id" in model:
+            model["model_id"] = str(model["model_id"])
+
     return jsonify(models)
+
 
 
 if __name__ == "__main__":
