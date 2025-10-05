@@ -26,7 +26,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2, Upload, Download } from 'lucide-react';
-import { FormControl, FormItem, FormLabel } from './ui/form';
+import { Form, FormControl, FormItem, FormLabel } from './ui/form';
+import { useForm } from 'react-hook-form';
 
 type DataRow = Record<string, string | number>;
 type ResultRow = DataRow & {
@@ -47,6 +48,9 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [progress, setProgress] = useState(0);
     const { toast } = useToast();
+
+    // Dummy form to satisfy FormProvider context for shadcn components
+    const form = useForm();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
@@ -180,38 +184,42 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
                 <CardDescription>Upload a CSV or XLSX file to get predictions for multiple exoplanet candidates at once.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <FormItem>
-                        <FormLabel>Select Base Model</FormLabel>
-                        <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="Kepler">Kepler</SelectItem>
-                                <SelectItem value="TESS">TESS</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </FormItem>
-                    <FormItem>
-                        <FormLabel>Select Model Version</FormLabel>
-                        <Select onValueChange={setSelectedModel} value={selectedModel}>
-                            <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a version" />
-                            </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                                <SelectItem value="default">Default</SelectItem>
-                                {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
-                                    <SelectItem key={m.model_id} value={m.model_id}>
-                                        Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </FormItem>
-                </div>
+                <Form {...form}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <FormItem>
+                            <FormLabel>Select Base Model</FormLabel>
+                            <Select onValueChange={(v) => setModelType(v as ModelType)} defaultValue={modelType}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a model" />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="Kepler">Kepler</SelectItem>
+                                    <SelectItem value="TESS">TESS</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </FormItem>
+                        <FormItem>
+                            <FormLabel>Select Model Version</FormLabel>
+                            <Select onValueChange={setSelectedModel} value={selectedModel}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a version" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="default">Default</SelectItem>
+                                    {tunedModels.filter(m => m.model_name === modelType.toLowerCase()).map(m => (
+                                        <SelectItem key={m.model_id} value={m.model_id}>
+                                            Tuned - {new Date(m.created_at).toLocaleString()} (Acc: {m.accuracy.toFixed(2)})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </FormItem>
+                    </div>
+                </Form>
                  <div className="space-y-2">
                     <Label htmlFor="file-upload">Upload File</Label>
                     <Input id="file-upload" type="file" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
