@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import * as React from "react";
@@ -356,8 +357,7 @@ function SinglePredictionTab() {
   );
 }
 
-
-export default function Home() {
+function HomePageContent() {
   const { user, isUserLoading } = useUser();
   const auth = useAuth();
   const [tunedModels, setTunedModels] = React.useState<TunedModel[]>([]);
@@ -431,4 +431,8 @@ export default function Home() {
   );
 }
 
-    
+export default function Home() {
+    return (
+        <HomePageContent />
+    )
+}
