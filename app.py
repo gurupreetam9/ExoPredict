@@ -7,10 +7,16 @@ from pymongo import MongoClient
 import gridfs
 from dotenv import load_dotenv
 import os
+import logging
+
 load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 # Get the connection URI and database name from environment variables
 mongo_uri = os.environ.get("MONGO_DB_CLIENT_URI", "mongodb://localhost:27017/")
@@ -69,71 +75,83 @@ def tune_model():
     from sklearn.metrics import accuracy_score
     from sklearn.pipeline import Pipeline
 
+    try:
+        data = request.json
+        model_name = data.get("model")
+        user_param_grid = data.get("hyperparameters", {})
 
-    data = request.json
-    model_name = data.get("model")
-    user_param_grid = data.get("hyperparameters", {})
+        app.logger.info(f"Received tuning request for model: {model_name}")
+        app.logger.info(f"Received hyperparameters: {user_param_grid}")
 
-    if not model_name:
-        return jsonify({"error": "Missing model name"}), 400
-    
-    if not user_param_grid:
-        return jsonify({"error": "Missing hyperparameters for tuning"}), 400
 
-    # Load training data
-    X_train = joblib.load(f"{model_name}_X_train.pkl")
-    y_train = joblib.load(f"{model_name}_y_train.pkl")
+        if not model_name:
+            return jsonify({"error": "Missing model name"}), 400
+        
+        if not user_param_grid:
+            return jsonify({"error": "Missing hyperparameters for tuning"}), 400
 
-    # Initialize base models
-    xgb = XGBClassifier(random_state=42)
-    rf = RandomForestClassifier(random_state=42)
-    gb = GradientBoostingClassifier(random_state=42)
-    meta_model = LogisticRegression(max_iter=1000)
+        # Load training data
+        X_train = joblib.load(f"{model_name}_X_train.pkl")
+        y_train = joblib.load(f"{model_name}_y_train.pkl")
 
-    # --- Build the Stacking Ensemble ---
-    stacking_model = StackingClassifier(
-        estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
-        final_estimator=meta_model,
-        cv=2 
-    )
+        # Initialize base models
+        xgb = XGBClassifier(random_state=42)
+        rf = RandomForestClassifier(random_state=42)
+        gb = GradientBoostingClassifier(random_state=42)
+        meta_model = LogisticRegression(max_iter=1000)
 
-    # --- Use GridSearchCV on the entire stack by wrapping it in a Pipeline ---
-    pipeline = Pipeline([('classifier', stacking_model)])
-    
-    grid_search = GridSearchCV(pipeline, user_param_grid, cv=2)
-    grid_search.fit(X_train, y_train)
+        # --- Build the Stacking Ensemble ---
+        stacking_model = StackingClassifier(
+            estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
+            final_estimator=meta_model,
+            cv=2
+        )
 
-    best_estimator = grid_search.best_estimator_
-    best_params = grid_search.best_params_
+        # --- Use GridSearchCV on the entire stack by wrapping it in a Pipeline ---
+        pipeline = Pipeline([('classifier', stacking_model)])
+        
+        grid_search = GridSearchCV(pipeline, user_param_grid, cv=2)
+        app.logger.info("Starting GridSearchCV...")
+        grid_search.fit(X_train, y_train)
+        app.logger.info("GridSearchCV finished.")
 
-    # --- Save the final model ---
-    model_bytes = io.BytesIO()
-    joblib.dump(best_estimator, model_bytes)
-    model_bytes.seek(0)
-    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
+        best_estimator = grid_search.best_estimator_
+        best_params = grid_search.best_params_
 
-    X_test = joblib.load(f"{model_name}_X_test.pkl")
-    y_test = joblib.load(f"{model_name}_y_test.pkl")
-    y_pred = best_estimator.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    
-    # Save metadata
-    db.models.insert_one({
-        "model_name": model_name,
-        "model_id": model_id,
-        "hyperparameters": best_params,
-        "accuracy": accuracy,
-        "created_at": datetime.utcnow()
-    })
+        # --- Save the final model ---
+        model_bytes = io.BytesIO()
+        joblib.dump(best_estimator, model_bytes)
+        model_bytes.seek(0)
+        model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
+        app.logger.info(f"Saved tuned model with ID: {model_id}")
 
-    return jsonify({
-        "message": "Model tuned and saved successfully",
-        "model_name": model_name,
-        "best_params": best_params,
-        "accuracy": accuracy,
-        "model_id": str(model_id)
-    })
+        X_test = joblib.load(f"{model_name}_X_test.pkl")
+        y_test = joblib.load(f"{model_name}_y_test.pkl")
+        y_pred = best_estimator.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        
+        # Save metadata
+        db.models.insert_one({
+            "model_name": model_name,
+            "model_id": model_id,
+            "hyperparameters": best_params,
+            "accuracy": accuracy,
+            "created_at": datetime.utcnow()
+        })
+        app.logger.info("Saved model metadata to database.")
 
+
+        return jsonify({
+            "message": "Model tuned and saved successfully",
+            "model_name": model_name,
+            "best_params": best_params,
+            "accuracy": accuracy,
+            "model_id": str(model_id)
+        })
+
+    except Exception as e:
+        app.logger.error("An error occurred during model tuning:", exc_info=True)
+        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
 
 
 # ---------------------------
