@@ -78,7 +78,7 @@ def tune_model():
         return jsonify({"error": "Missing model name"}), 400
     
     if not user_param_grid:
-        return jsonify({"error": "Missing hyperparameters"}), 400
+        return jsonify({"error": "Missing hyperparameters for tuning"}), 400
 
     # Load training data
     X_train = joblib.load(f"{model_name}_X_train.pkl")
@@ -89,19 +89,22 @@ def tune_model():
     rf = RandomForestClassifier(random_state=42)
     gb = GradientBoostingClassifier(random_state=42)
     meta_model = LogisticRegression(max_iter=1000)
-    
+
+    # --- Build the Stacking Ensemble ---
     stacking_model = StackingClassifier(
         estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
         final_estimator=meta_model,
-        cv=3
+        cv=2 
     )
 
+    # --- Use GridSearchCV on the entire stack ---
     pipeline = Pipeline([('classifier', stacking_model)])
-
-    grid_search = GridSearchCV(pipeline, param_grid=user_param_grid, cv=2, n_jobs=1)
+    
+    grid_search = GridSearchCV(pipeline, user_param_grid, cv=2, n_jobs=1)
     grid_search.fit(X_train, y_train)
 
     best_estimator = grid_search.best_estimator_
+    best_params = grid_search.best_params_
 
     # --- Save the final model ---
     model_bytes = io.BytesIO()
@@ -113,23 +116,23 @@ def tune_model():
     y_test = joblib.load(f"{model_name}_y_test.pkl")
     y_pred = best_estimator.predict(X_test)
     accuracy = accuracy_score(y_test, y_pred)
+    
     # Save metadata
     db.models.insert_one({
         "model_name": model_name,
         "model_id": model_id,
-        "hyperparameters": grid_search.best_params_,
-        "accuracy":accuracy,
+        "hyperparameters": best_params,
+        "accuracy": accuracy,
         "created_at": datetime.utcnow()
     })
 
     return jsonify({
         "message": "Model tuned and saved successfully",
         "model_name": model_name,
-        "best_params": grid_search.best_params_,
+        "best_params": best_params,
         "accuracy": accuracy,
         "model_id": str(model_id)
     })
-
 
 
 
