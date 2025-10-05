@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo, useState, useEffect, useCallback } from 'react';
 import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
@@ -60,9 +60,9 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   });
 
   // Function to be called by the initializer
-  const setFirebaseServices = (newServices: { firebaseApp: FirebaseApp; auth: Auth; firestore: Firestore }) => {
+  const setFirebaseServices = useCallback((newServices: { firebaseApp: FirebaseApp; auth: Auth; firestore: Firestore }) => {
     setServices(newServices);
-  };
+  }, []);
 
   useEffect(() => {
     if (!services.auth) {
@@ -89,7 +89,7 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       ...userAuthState,
       setFirebaseServices,
     };
-  }, [services, userAuthState]);
+  }, [services, userAuthState, setFirebaseServices]);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
