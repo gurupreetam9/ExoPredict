@@ -20,6 +20,7 @@ import { Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from './ui/form';
 import { Input } from './ui/input';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 
 interface ModelTuningProps {
     onModelTuned: () => void;
@@ -28,9 +29,18 @@ interface ModelTuningProps {
 
 const formSchema = z.object({
     modelType: z.enum(['Kepler', 'TESS']),
-    n_estimators: z.string().min(1, 'Cannot be empty').regex(/^(\d+)(,\s*\d+)*$/, 'Must be comma-separated numbers'),
-    max_depth: z.string().min(1, 'Cannot be empty').regex(/^(\d+)(,\s*\d+)*$/, 'Must be comma-separated numbers'),
-});
+    rf_n_estimators: z.string().optional(),
+    rf_max_depth: z.string().optional(),
+    xgb_n_estimators: z.string().optional(),
+    xgb_max_depth: z.string().optional(),
+    gb_n_estimators: z.string().optional(),
+    gb_max_depth: z.string().optional(),
+}).refine(data => 
+    data.rf_n_estimators || data.rf_max_depth || 
+    data.xgb_n_estimators || data.xgb_max_depth || 
+    data.gb_n_estimators || data.gb_max_depth, 
+    { message: "At least one hyperparameter field must be filled.", path: ["rf_n_estimators"] }
+);
 
 const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) => {
     const [isTuning, setIsTuning] = useState(false);
@@ -40,15 +50,27 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
         resolver: zodResolver(formSchema),
         defaultValues: {
             modelType: 'Kepler',
-            n_estimators: '100, 200',
-            max_depth: '10, 20',
+            rf_n_estimators: '100, 200',
+            rf_max_depth: '10, 20',
+            xgb_n_estimators: '',
+            xgb_max_depth: '',
+            gb_n_estimators: '',
+            gb_max_depth: '',
         },
     });
 
     const handleTuneModel = async (values: z.infer<typeof formSchema>) => {
         setIsTuning(true);
         try {
-            const result = await tuneModel(values.modelType, values.n_estimators, values.max_depth);
+            const params = {
+                rf_n_estimators: values.rf_n_estimators || '',
+                rf_max_depth: values.rf_max_depth || '',
+                xgb_n_estimators: values.xgb_n_estimators || '',
+                xgb_max_depth: values.xgb_max_depth || '',
+                gb_n_estimators: values.gb_n_estimators || '',
+                gb_max_depth: values.gb_max_depth || '',
+            };
+            const result = await tuneModel(values.modelType, params);
             toast({
                 title: 'Model Tuning Completed',
                 description: `Tuning for ${result.model_name} finished with accuracy: ${result.accuracy.toFixed(4)}`,
@@ -71,8 +93,8 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-4">
             <Card>
                 <CardHeader>
-                    <CardTitle>Tune a New Model</CardTitle>
-                    <CardDescription>Select a base model and define hyperparameters to create a new, optimized model version.</CardDescription>
+                    <CardTitle>Tune a New Stacking Model</CardTitle>
+                    <CardDescription>Define hyperparameter grids for the base models in the stacking ensemble.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>
@@ -82,11 +104,11 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                 name="modelType"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Select Base Model</FormLabel>
+                                        <FormLabel>Select Base Dataset</FormLabel>
                                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                                             <FormControl>
                                                 <SelectTrigger>
-                                                    <SelectValue placeholder="Select a model" />
+                                                    <SelectValue placeholder="Select a dataset" />
                                                 </SelectTrigger>
                                             </FormControl>
                                             <SelectContent>
@@ -98,35 +120,70 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                     </FormItem>
                                 )}
                             />
-                            <FormField
-                                control={form.control}
-                                name="n_estimators"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>N Estimators</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., 100, 200, 300" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                             <FormField
-                                control={form.control}
-                                name="max_depth"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Max Depth</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="e.g., 10, 20, 30" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
+
+                            <Accordion type="multiple" defaultValue={['rf', 'xgb', 'gb']} className="w-full">
+                                <AccordionItem value="rf">
+                                    <AccordionTrigger>Random Forest</AccordionTrigger>
+                                    <AccordionContent className="space-y-4">
+                                        <FormField control={form.control} name="rf_n_estimators" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>N Estimators</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="rf_max_depth" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Max Depth</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 10, 20" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </AccordionContent>
+                                </AccordionItem>
+                                <AccordionItem value="xgb">
+                                    <AccordionTrigger>XGBoost</AccordionTrigger>
+                                    <AccordionContent className="space-y-4">
+                                        <FormField control={form.control} name="xgb_n_estimators" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>N Estimators</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="xgb_max_depth" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Max Depth</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 5, 10" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </AccordionContent>
+                                </AccordionItem>
+                                <AccordionItem value="gb">
+                                    <AccordionTrigger>Gradient Boosting</AccordionTrigger>
+                                    <AccordionContent className="space-y-4">
+                                        <FormField control={form.control} name="gb_n_estimators" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>N Estimators</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                        <FormField control={form.control} name="gb_max_depth" render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Max Depth</FormLabel>
+                                                <FormControl><Input placeholder="e.g., 3, 5" {...field} /></FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )} />
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                            
                             <Button type="submit" disabled={isTuning} className="w-full">
                                 {isTuning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                {isTuning ? 'Tuning Model...' : `Tune ${form.watch('modelType')} Model`}
+                                {isTuning ? 'Tuning Model...' : `Tune ${form.watch('modelType')} Stacking Model`}
                             </Button>
                         </form>
                     </Form>
@@ -136,7 +193,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
             <Card>
                 <CardHeader>
                     <CardTitle>Available Tuned Models</CardTitle>
-                    <CardDescription>These are the custom models you have trained.</CardDescription>
+                    <CardDescription>These are the custom stacking models you have trained.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="max-h-[400px] overflow-auto rounded-md border">
@@ -156,7 +213,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                             <TableCell className="capitalize">{model.model_name}</TableCell>
                                             <TableCell>{model.accuracy.toFixed(4)}</TableCell>
                                             <TableCell>{new Date(model.created_at).toLocaleString()}</TableCell>
-                                            <TableCell className="text-xs">{JSON.stringify(model.hyperparameters)}</TableCell>
+                                            <TableCell className="text-xs max-w-xs truncate">{JSON.stringify(model.hyperparameters)}</TableCell>
                                         </TableRow>
                                     ))
                                 ) : (

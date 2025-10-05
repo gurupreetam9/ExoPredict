@@ -6,6 +6,12 @@ from pymongo import MongoClient
 import gridfs
 from dotenv import load_dotenv
 import os
+from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import StackingClassifier
+from xgboost import XGBClassifier
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -57,16 +63,13 @@ def predict():
 
 
 # ---------------------------
-# NEW: Train & Tune Model Endpoint
+# NEW: Train & Tune Stacking Model Endpoint
 # ---------------------------
 @app.route("/tune_model", methods=["POST"])
 def tune_model():
-    from sklearn.model_selection import GridSearchCV
-    from sklearn.ensemble import RandomForestClassifier
-
     data = request.json
     model_name = data.get("model")
-    user_param_grid = data.get("hyperparameters")  # user-specified hyperparameters
+    user_param_grid = data.get("hyperparameters")
 
     if not model_name:
         return jsonify({"error": "Missing model name"}), 400
@@ -78,11 +81,24 @@ def tune_model():
     X_train = joblib.load(f"{model_name}_X_train.pkl")
     y_train = joblib.load(f"{model_name}_y_train.pkl")
 
-    # Initialize model
-    clf = RandomForestClassifier(random_state=42)
+    # Define base models
+    xgb = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
+    rf = RandomForestClassifier(random_state=42)
+    gb = GradientBoostingClassifier(random_state=42)
+    
+    # Meta model
+    meta_model = LogisticRegression(max_iter=1000)
 
-    # Grid search using user-provided param grid, running on a single core for stability
-    grid_search = GridSearchCV(clf, user_param_grid, cv=3, n_jobs=1)
+    # Stacking Ensemble
+    stack_model = StackingClassifier(
+        estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
+        final_estimator=meta_model,
+        cv=3, # Using a smaller CV for faster tuning in a web request context
+        n_jobs=1 # Force single-core to prevent memory issues
+    )
+
+    # Grid search using user-provided param grid
+    grid_search = GridSearchCV(estimator=stack_model, param_grid=user_param_grid, cv=3, n_jobs=1, verbose=2)
     grid_search.fit(X_train, y_train)
 
     best_model = grid_search.best_estimator_
@@ -93,7 +109,7 @@ def tune_model():
     model_bytes.seek(0)
 
     # Save tuned model to GridFS
-    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
+    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_stack_model.joblib")
 
     # Save metadata in DB
     db.models.insert_one({
@@ -105,7 +121,7 @@ def tune_model():
     })
 
     return jsonify({
-        "message": "Model tuned and saved successfully",
+        "message": "Stacking model tuned and saved successfully",
         "model_name": model_name,
         "best_params": grid_search.best_params_,
         "accuracy": grid_search.best_score_,

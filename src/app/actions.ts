@@ -74,14 +74,28 @@ export async function getExplanationForPrediction(
   });
 }
 
-export async function tuneModel(modelName: string, nEstimators: string, maxDepth: string): Promise<{ message: string, model_name: string, hyperparameters: any, accuracy: number, model_id: string }> {
+export async function tuneModel(
+    modelName: string, 
+    params: {
+        rf_n_estimators: string;
+        rf_max_depth: string;
+        xgb_n_estimators: string;
+        xgb_max_depth: string;
+        gb_n_estimators: string;
+        gb_max_depth: string;
+    }
+): Promise<{ message: string, model_name: string, hyperparameters: any, accuracy: number, model_id: string }> {
     
-    const parseStringList = (str: string) => str.split(',').map(s => parseInt(s.trim(), 10));
+    const parseStringList = (str: string) => str.split(',').map(s => s.trim()).filter(s => s).map(Number);
 
-    const hyperparameterGrid = {
-        'n_estimators': parseStringList(nEstimators),
-        'max_depth': parseStringList(maxDepth),
-    };
+    const hyperparameterGrid: Record<string, number[]> = {};
+
+    if (params.rf_n_estimators) hyperparameterGrid['rf__n_estimators'] = parseStringList(params.rf_n_estimators);
+    if (params.rf_max_depth) hyperparameterGrid['rf__max_depth'] = parseStringList(params.rf_max_depth);
+    if (params.xgb_n_estimators) hyperparameterGrid['xgb__n_estimators'] = parseStringList(params.xgb_n_estimators);
+    if (params.xgb_max_depth) hyperparameterGrid['xgb__max_depth'] = parseStringList(params.xgb_max_depth);
+    if (params.gb_n_estimators) hyperparameterGrid['gb__n_estimators'] = parseStringList(params.gb_n_estimators);
+    if (params.gb_max_depth) hyperparameterGrid['gb__max_depth'] = parseStringList(params.gb_max_depth);
 
     const response = await fetch(`${API_URL}/tune_model`, {
         method: 'POST',
