@@ -10,11 +10,10 @@ import os
 import logging
 
 load_dotenv()
-
 app = Flask(__name__)
 CORS(app)
 
-# Configure logging
+# --- Logging Setup ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
@@ -69,27 +68,27 @@ def predict():
 @app.route("/tune_model", methods=["POST"])
 def tune_model():
     from sklearn.model_selection import GridSearchCV
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, StackingClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
     from xgboost import XGBClassifier
     from sklearn.linear_model import LogisticRegression
+    from sklearn.ensemble import StackingClassifier
     from sklearn.metrics import accuracy_score
     from sklearn.pipeline import Pipeline
 
+    data = request.json
+    model_name = data.get("model")
+    user_param_grid = data.get("hyperparameters", {})
+    
+    logging.info(f"Received tuning request for model: {model_name}")
+    logging.info(f"Received hyperparameters: {user_param_grid}")
+
+    if not model_name:
+        return jsonify({"error": "Missing model name"}), 400
+    
+    if not user_param_grid:
+        return jsonify({"error": "Missing hyperparameters for tuning"}), 400
+
     try:
-        data = request.json
-        model_name = data.get("model")
-        user_param_grid = data.get("hyperparameters", {})
-
-        app.logger.info(f"Received tuning request for model: {model_name}")
-        app.logger.info(f"Received hyperparameters: {user_param_grid}")
-
-
-        if not model_name:
-            return jsonify({"error": "Missing model name"}), 400
-        
-        if not user_param_grid:
-            return jsonify({"error": "Missing hyperparameters for tuning"}), 400
-
         # Load training data
         X_train = joblib.load(f"{model_name}_X_train.pkl")
         y_train = joblib.load(f"{model_name}_y_train.pkl")
@@ -100,20 +99,21 @@ def tune_model():
         gb = GradientBoostingClassifier(random_state=42)
         meta_model = LogisticRegression(max_iter=1000)
 
-        # --- Build the Stacking Ensemble ---
+        # Build the Stacking Ensemble
         stacking_model = StackingClassifier(
             estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
             final_estimator=meta_model,
-            cv=2
+            cv=2 
         )
 
-        # --- Use GridSearchCV on the entire stack by wrapping it in a Pipeline ---
         pipeline = Pipeline([('classifier', stacking_model)])
-        
-        grid_search = GridSearchCV(pipeline, user_param_grid, cv=2)
-        app.logger.info("Starting GridSearchCV...")
+
+        # Directly use the user_param_grid from the frontend
+        grid_search = GridSearchCV(pipeline, user_param_grid, cv=2, n_jobs=1, error_score='raise')
+
+        logging.info("Starting GridSearchCV...")
         grid_search.fit(X_train, y_train)
-        app.logger.info("GridSearchCV finished.")
+        logging.info("GridSearchCV finished.")
 
         best_estimator = grid_search.best_estimator_
         best_params = grid_search.best_params_
@@ -123,12 +123,13 @@ def tune_model():
         joblib.dump(best_estimator, model_bytes)
         model_bytes.seek(0)
         model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
-        app.logger.info(f"Saved tuned model with ID: {model_id}")
 
         X_test = joblib.load(f"{model_name}_X_test.pkl")
         y_test = joblib.load(f"{model_name}_y_test.pkl")
         y_pred = best_estimator.predict(X_test)
         accuracy = accuracy_score(y_test, y_pred)
+        
+        logging.info(f"Model tuned successfully with accuracy: {accuracy}")
         
         # Save metadata
         db.models.insert_one({
@@ -138,8 +139,6 @@ def tune_model():
             "accuracy": accuracy,
             "created_at": datetime.utcnow()
         })
-        app.logger.info("Saved model metadata to database.")
-
 
         return jsonify({
             "message": "Model tuned and saved successfully",
@@ -150,8 +149,8 @@ def tune_model():
         })
 
     except Exception as e:
-        app.logger.error("An error occurred during model tuning:", exc_info=True)
-        return jsonify({"error": "An internal server error occurred.", "details": str(e)}), 500
+        logging.error("An error occurred during model tuning:", exc_info=True)
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 
 # ---------------------------
@@ -168,20 +167,21 @@ def predict_tuned():
 
     from bson import ObjectId
     try:
-        model_id = ObjectId(model_id_str)
+        # Use the main _id from the collection as the identifier
+        model_id_obj = ObjectId(model_id_str)
     except Exception:
         return jsonify({"error": "Invalid model ID format"}), 400
 
-    # Load the specific tuned model from MongoDB
-    tuned_model_data = db.models.find_one({"_id": model_id})
+    # Load the specific tuned model from MongoDB using its primary _id
+    tuned_model_data = db.models.find_one({"_id": model_id_obj})
 
     if not tuned_model_data:
-        # Fallback for older references if needed
-        tuned_model_data = db.models.find_one({"model_id": model_id})
-        if not tuned_model_data:
-            return jsonify({"error": "No tuned model found with that ID"}), 404
+        return jsonify({"error": "No tuned model found with that ID"}), 404
 
-    model_file_id = tuned_model_data.get("model_id", tuned_model_data["_id"])
+    model_file_id = tuned_model_data.get("model_id")
+    if not model_file_id:
+        return jsonify({"error": "Model file reference not found in metadata"}), 500
+
     model_file = fs.get(model_file_id)
     model = joblib.load(model_file)
     
@@ -213,13 +213,17 @@ def predict_tuned():
 # ---------------------------
 @app.route("/tuned_models", methods=["GET"])
 def get_tuned_models():
-    models = list(db.models.find())
+    # Sort by creation date descending
+    models_cursor = db.models.find().sort("created_at", -1)
+    models = list(models_cursor)
 
-    # Convert ObjectId to string
+    # Convert ObjectId to string for JSON serialization
     for model in models:
-        # Use the main _id as the primary identifier on the frontend
+        # The primary ID for selection on the frontend is the document's _id
         model["model_id"] = str(model["_id"]) 
         model["_id"] = str(model["_id"])
+        if 'model_id' in model and not isinstance(model['model_id'], str):
+             model['model_id'] = str(model['model_id'])
         
     return jsonify(models)
 
@@ -227,5 +231,7 @@ def get_tuned_models():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+    
 
     
