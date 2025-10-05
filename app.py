@@ -81,8 +81,8 @@ def tune_model():
     # Initialize model
     clf = RandomForestClassifier(random_state=42)
 
-    # Grid search using user-provided param grid
-    grid_search = GridSearchCV(clf, user_param_grid, cv=3, n_jobs=-1)
+    # Grid search using user-provided param grid, running on a single core for stability
+    grid_search = GridSearchCV(clf, user_param_grid, cv=3, n_jobs=1)
     grid_search.fit(X_train, y_train)
 
     best_model = grid_search.best_estimator_
