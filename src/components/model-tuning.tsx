@@ -52,8 +52,8 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
         resolver: zodResolver(formSchema),
         defaultValues: {
             modelType: 'Kepler',
-            rf_n_estimators: '100, 200',
-            rf_max_depth: '10, 20',
+            rf_n_estimators: '',
+            rf_max_depth: '',
             xgb_n_estimators: '',
             xgb_max_depth: '',
             gb_n_estimators: '',
