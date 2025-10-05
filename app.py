@@ -97,10 +97,10 @@ def tune_model():
         cv=2 
     )
 
-    # --- Use GridSearchCV on the entire stack ---
+    # --- Use GridSearchCV on the entire stack by wrapping it in a Pipeline ---
     pipeline = Pipeline([('classifier', stacking_model)])
     
-    grid_search = GridSearchCV(pipeline, user_param_grid, cv=2, n_jobs=1)
+    grid_search = GridSearchCV(pipeline, user_param_grid, cv=2)
     grid_search.fit(X_train, y_train)
 
     best_estimator = grid_search.best_estimator_

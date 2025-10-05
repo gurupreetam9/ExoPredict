@@ -113,3 +113,4 @@ export async function getTunedModels(): Promise<any[]> {
     const response = await fetch(`${API_URL}/tuned_models`);
     return handleApiResponse(response);
 }
+
