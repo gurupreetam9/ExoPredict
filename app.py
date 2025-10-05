@@ -63,21 +63,24 @@ def predict():
 @app.route("/tune_model", methods=["POST"])
 def tune_model():
     from sklearn.model_selection import GridSearchCV
-    from sklearn.ensemble import RandomForestClassifier, StackingClassifier, GradientBoostingClassifier
+    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, StackingClassifier
     from xgboost import XGBClassifier
     from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import accuracy_score
+    from sklearn.pipeline import Pipeline
+
 
     data = request.json
     model_name = data.get("model")
-    user_param_grid = data.get("hyperparameters")
+    user_param_grid = data.get("hyperparameters", {})
 
     if not model_name:
         return jsonify({"error": "Missing model name"}), 400
+    
+    if not user_param_grid:
+        return jsonify({"error": "Missing hyperparameters"}), 400
 
-    if not user_param_grid or not isinstance(user_param_grid, dict):
-        return jsonify({"error": "Missing or invalid hyperparameters"}), 400
-
-    # Load training data from disk
+    # Load training data
     X_train = joblib.load(f"{model_name}_X_train.pkl")
     y_train = joblib.load(f"{model_name}_y_train.pkl")
 
@@ -85,38 +88,37 @@ def tune_model():
     xgb = XGBClassifier(random_state=42)
     rf = RandomForestClassifier(random_state=42)
     gb = GradientBoostingClassifier(random_state=42)
-
-    # Meta model
     meta_model = LogisticRegression(max_iter=1000)
-
-    # Build Stacking Ensemble
+    
     stacking_model = StackingClassifier(
         estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
         final_estimator=meta_model,
-        cv=3,
-        n_jobs=1
+        cv=3
     )
 
-    # Grid search using user-provided param grid
-    grid_search = GridSearchCV(stacking_model, user_param_grid, cv=2)
+    pipeline = Pipeline([('classifier', stacking_model)])
+
+    grid_search = GridSearchCV(pipeline, param_grid=user_param_grid, cv=2, n_jobs=1)
     grid_search.fit(X_train, y_train)
 
-    best_model = grid_search.best_estimator_
+    best_estimator = grid_search.best_estimator_
 
-    # Save tuned model to bytes
+    # --- Save the final model ---
     model_bytes = io.BytesIO()
-    joblib.dump(best_model, model_bytes)
+    joblib.dump(best_estimator, model_bytes)
     model_bytes.seek(0)
-
-    # Save tuned model to GridFS
     model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
 
-    # Save metadata in DB
+    X_test = joblib.load(f"{model_name}_X_test.pkl")
+    y_test = joblib.load(f"{model_name}_y_test.pkl")
+    y_pred = best_estimator.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    # Save metadata
     db.models.insert_one({
         "model_name": model_name,
         "model_id": model_id,
         "hyperparameters": grid_search.best_params_,
-        "accuracy": grid_search.best_score_,
+        "accuracy":accuracy,
         "created_at": datetime.utcnow()
     })
 
@@ -124,9 +126,10 @@ def tune_model():
         "message": "Model tuned and saved successfully",
         "model_name": model_name,
         "best_params": grid_search.best_params_,
-        "accuracy": grid_search.best_score_,
+        "accuracy": accuracy,
         "model_id": str(model_id)
     })
+
 
 
 
