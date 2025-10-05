@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -61,6 +62,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
 
     const handleTuneModel = async (values: z.infer<typeof formSchema>) => {
         setIsTuning(true);
+        console.log("Starting model tuning with values:", values);
         try {
             const params = {
                 rf_n_estimators: values.rf_n_estimators || '',
@@ -71,13 +73,14 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                 gb_max_depth: values.gb_max_depth || '',
             };
             const result = await tuneModel(values.modelType, params);
+            console.log("Model tuning successful, result:", result);
             toast({
                 title: 'Model Tuning Completed',
                 description: `Tuning for ${result.model_name} finished with accuracy: ${result.accuracy.toFixed(4)}`,
             });
             onModelTuned();
         } catch (error) {
-            console.error('Error tuning model:', error);
+            console.error('Error in handleTuneModel:', error);
             const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
             toast({
                 variant: 'destructive',
@@ -85,6 +88,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                 description: errorMessage,
             });
         } finally {
+            console.log("Finished model tuning attempt.");
             setIsTuning(false);
         }
     };

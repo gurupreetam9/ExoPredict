@@ -12,16 +12,28 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5001';
 async function handleApiResponse(response: Response) {
     if (!response.ok) {
         const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'API request failed');
-        } else {
-        const errorText = await response.text();
-        console.error("API returned non-JSON error:", errorText);
-        throw new Error('API request failed: The server returned an unexpected error.');
+        let errorData;
+        try {
+            if (contentType && contentType.includes('application/json')) {
+                errorData = await response.json();
+            } else {
+                errorData = { error: await response.text() };
+            }
+        } catch (e) {
+            errorData = { error: 'Could not parse error response.' };
         }
+        console.error("API Request Failed:", errorData);
+        throw new Error(errorData.error || 'API request failed');
     }
-    return response.json();
+    // Log successful response before parsing
+    const responseText = await response.text();
+    console.log("Raw API Success Response:", responseText);
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        console.error("Failed to parse JSON response:", responseText);
+        throw new Error("Failed to parse server response.");
+    }
 }
 
 export async function getPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }> {
@@ -98,6 +110,8 @@ export async function tuneModel(
     if (params.gb_n_estimators) hyperparameterGrid['classifier__gb__n_estimators'] = parseStringList(params.gb_n_estimators);
     if (params.gb_max_depth) hyperparameterGrid['classifier__gb__max_depth'] = parseStringList(params.gb_max_depth);
 
+    console.log("Sending to /tune_model:", { model: modelName.toLowerCase(), hyperparameters: hyperparameterGrid });
+
     const response = await fetch(`${API_URL}/tune_model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -106,11 +120,13 @@ export async function tuneModel(
             hyperparameters: hyperparameterGrid 
         }),
     });
-    return handleApiResponse(response);
+
+    const result = await handleApiResponse(response);
+    console.log("Result from tuneModel action:", result);
+    return result;
 }
 
 export async function getTunedModels(): Promise<any[]> {
     const response = await fetch(`${API_URL}/tuned_models`);
     return handleApiResponse(response);
 }
-
