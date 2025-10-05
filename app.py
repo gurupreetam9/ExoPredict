@@ -4,13 +4,22 @@ import joblib, io, numpy as np
 from datetime import datetime
 from pymongo import MongoClient
 import gridfs
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-# MongoDB setup
-mongo_client = MongoClient("mongodb://localhost:27017/")
-db = mongo_client["model_db"]
+# Get the connection URI and database name from environment variables
+mongo_uri = os.environ.get("MONGO_DB_CLIENT_URI", "mongodb://localhost:27017/")
+db_name = os.environ.get("MONGO_DB_NAME", "model_db")
+
+# Create MongoClient using the URI
+mongo_client = MongoClient(mongo_uri)
+db = mongo_client[db_name]
+
+# Initialize GridFS
 fs = gridfs.GridFS(db)
 
 # ---------------------------
@@ -57,21 +66,23 @@ def tune_model():
 
     data = request.json
     model_name = data.get("model")
+    user_param_grid = data.get("hyperparameters")  # user-specified hyperparameters
 
     if not model_name:
         return jsonify({"error": "Missing model name"}), 400
+
+    if not user_param_grid or not isinstance(user_param_grid, dict):
+        return jsonify({"error": "Missing or invalid hyperparameters"}), 400
 
     # Load training data from disk
     X_train = joblib.load(f"{model_name}_X_train.pkl")
     y_train = joblib.load(f"{model_name}_y_train.pkl")
 
-    # Hyperparameter tuning
-    param_grid = {
-        "n_estimators": [50, 100],
-        "max_depth": [None, 10, 20]
-    }
+    # Initialize model
     clf = RandomForestClassifier(random_state=42)
-    grid_search = GridSearchCV(clf, param_grid, cv=3)
+
+    # Grid search using user-provided param grid
+    grid_search = GridSearchCV(clf, user_param_grid, cv=3, n_jobs=-1)
     grid_search.fit(X_train, y_train)
 
     best_model = grid_search.best_estimator_
@@ -84,7 +95,7 @@ def tune_model():
     # Save tuned model to GridFS
     model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
 
-    # Save metadata
+    # Save metadata in DB
     db.models.insert_one({
         "model_name": model_name,
         "model_id": model_id,
@@ -96,10 +107,11 @@ def tune_model():
     return jsonify({
         "message": "Model tuned and saved successfully",
         "model_name": model_name,
-        "hyperparameters": grid_search.best_params_,
+        "best_params": grid_search.best_params_,
         "accuracy": grid_search.best_score_,
         "model_id": str(model_id)
     })
+
 
 
 # ---------------------------

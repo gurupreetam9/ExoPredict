@@ -75,10 +75,18 @@ export async function getExplanationForPrediction(
 }
 
 export async function tuneModel(modelName: string): Promise<{ message: string, model_name: string, hyperparameters: any, accuracy: number, model_id: string }> {
+    const hyperparameterGrid = {
+        'n_estimators': [100, 200],
+        'max_depth': [10, 20],
+    };
+
     const response = await fetch(`${API_URL}/tune_model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: modelName.toLowerCase() }),
+        body: JSON.stringify({ 
+            model: modelName.toLowerCase(),
+            hyperparameters: hyperparameterGrid 
+        }),
     });
     return handleApiResponse(response);
 }
