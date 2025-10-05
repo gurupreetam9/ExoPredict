@@ -93,12 +93,12 @@ def tune_model():
     stacking_model = StackingClassifier(
         estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
         final_estimator=meta_model,
-        cv=3, # Using a smaller CV for faster tuning in a web request
-        n_jobs=1 # Use a single job to avoid memory issues
+        cv=3,
+        n_jobs=1
     )
 
     # Grid search using user-provided param grid
-    grid_search = GridSearchCV(stacking_model, user_param_grid, cv=3, n_jobs=1) # n_jobs=1 for stability
+    grid_search = GridSearchCV(stacking_model, user_param_grid, cv=2)
     grid_search.fit(X_train, y_train)
 
     best_model = grid_search.best_estimator_
