@@ -20,8 +20,9 @@ CORS(app)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # --- DB and GridFS Setup ---
-mongo_uri = os.environ.get("MONGO_DB_CLIENT_URI", "mongodb://localhost:27017/")
-db_name = os.environ.get("MONGO_DB_NAME", "model_db")
+mongo_uri = os.environ.get("MONGO_DB_CLIENT_URI") or "mongodb://localhost:27017/"
+# Ensure db_name has a default value if the environment variable is missing or empty
+db_name = os.environ.get("MONGO_DB_NAME") or "model_db"
 mongo_client = MongoClient(mongo_uri)
 db = mongo_client[db_name]
 fs = gridfs.GridFS(db)
