@@ -1,3 +1,4 @@
+
 "use server";
 
 import {
@@ -6,7 +7,7 @@ import {
 } from "@/ai/flows/prediction-explanation";
 import { ModelType } from "@/lib/definitions";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8080';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5001';
 
 async function handleApiResponse(response: Response) {
     if (!response.ok) {
@@ -90,12 +91,12 @@ export async function tuneModel(
 
     const hyperparameterGrid: Record<string, number[]> = {};
 
-    if (params.rf_n_estimators) hyperparameterGrid['rf__n_estimators'] = parseStringList(params.rf_n_estimators);
-    if (params.rf_max_depth) hyperparameterGrid['rf__max_depth'] = parseStringList(params.rf_max_depth);
-    if (params.xgb_n_estimators) hyperparameterGrid['xgb__n_estimators'] = parseStringList(params.xgb_n_estimators);
-    if (params.xgb_max_depth) hyperparameterGrid['xgb__max_depth'] = parseStringList(params.xgb_max_depth);
-    if (params.gb_n_estimators) hyperparameterGrid['gb__n_estimators'] = parseStringList(params.gb_n_estimators);
-    if (params.gb_max_depth) hyperparameterGrid['gb__max_depth'] = parseStringList(params.gb_max_depth);
+    if (params.rf_n_estimators) hyperparameterGrid['estimators__rf__n_estimators'] = parseStringList(params.rf_n_estimators);
+    if (params.rf_max_depth) hyperparameterGrid['estimators__rf__max_depth'] = parseStringList(params.rf_max_depth);
+    if (params.xgb_n_estimators) hyperparameterGrid['estimators__xgb__n_estimators'] = parseStringList(params.xgb_n_estimators);
+    if (params.xgb_max_depth) hyperparameterGrid['estimators__xgb__max_depth'] = parseStringList(params.xgb_max_depth);
+    if (params.gb_n_estimators) hyperparameterGrid['estimators__gb__n_estimators'] = parseStringList(params.gb_n_estimators);
+    if (params.gb_max_depth) hyperparameterGrid['estimators__gb__max_depth'] = parseStringList(params.gb_max_depth);
 
     const response = await fetch(`${API_URL}/tune_model`, {
         method: 'POST',
@@ -112,3 +113,5 @@ export async function getTunedModels(): Promise<any[]> {
     const response = await fetch(`${API_URL}/tuned_models`);
     return handleApiResponse(response);
 }
+
+    

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from 'react';
@@ -327,3 +328,5 @@ const BatchPrediction: React.FC<BatchPredictionProps> = ({ tunedModels }) => {
 };
 
 export default BatchPrediction;
+
+    

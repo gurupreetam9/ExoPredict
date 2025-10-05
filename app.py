@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib, io, numpy as np
@@ -6,13 +7,6 @@ from pymongo import MongoClient
 import gridfs
 from dotenv import load_dotenv
 import os
-from sklearn.model_selection import GridSearchCV
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import StackingClassifier
-from xgboost import XGBClassifier
-from bson import ObjectId
-
 load_dotenv()
 
 app = Flask(__name__)
@@ -64,10 +58,15 @@ def predict():
 
 
 # ---------------------------
-# NEW: Train & Tune Stacking Model Endpoint
+# NEW: Train & Tune Model Endpoint
 # ---------------------------
 @app.route("/tune_model", methods=["POST"])
 def tune_model():
+    from sklearn.model_selection import GridSearchCV
+    from sklearn.ensemble import RandomForestClassifier, StackingClassifier, GradientBoostingClassifier
+    from xgboost import XGBClassifier
+    from sklearn.linear_model import LogisticRegression
+
     data = request.json
     model_name = data.get("model")
     user_param_grid = data.get("hyperparameters")
@@ -75,31 +74,31 @@ def tune_model():
     if not model_name:
         return jsonify({"error": "Missing model name"}), 400
 
-    if not user_param_grid or not isinstance(user_param_grid, dict) or not user_param_grid:
+    if not user_param_grid or not isinstance(user_param_grid, dict):
         return jsonify({"error": "Missing or invalid hyperparameters"}), 400
 
     # Load training data from disk
     X_train = joblib.load(f"{model_name}_X_train.pkl")
     y_train = joblib.load(f"{model_name}_y_train.pkl")
 
-    # Define base models
-    xgb = XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss')
+    # Initialize base models
+    xgb = XGBClassifier(random_state=42)
     rf = RandomForestClassifier(random_state=42)
     gb = GradientBoostingClassifier(random_state=42)
-    
+
     # Meta model
     meta_model = LogisticRegression(max_iter=1000)
 
-    # Stacking Ensemble
-    stack_model = StackingClassifier(
+    # Build Stacking Ensemble
+    stacking_model = StackingClassifier(
         estimators=[('xgb', xgb), ('rf', rf), ('gb', gb)],
         final_estimator=meta_model,
-        cv=3, # Using a smaller CV for faster tuning in a web request context
-        n_jobs=1 # Force single-core to prevent memory issues
+        cv=3, # Using a smaller CV for faster tuning in a web request
+        n_jobs=1 # Use a single job to avoid memory issues
     )
 
     # Grid search using user-provided param grid
-    grid_search = GridSearchCV(estimator=stack_model, param_grid=user_param_grid, cv=3, n_jobs=1, verbose=2)
+    grid_search = GridSearchCV(stacking_model, user_param_grid, cv=3, n_jobs=1) # n_jobs=1 for stability
     grid_search.fit(X_train, y_train)
 
     best_model = grid_search.best_estimator_
@@ -110,19 +109,19 @@ def tune_model():
     model_bytes.seek(0)
 
     # Save tuned model to GridFS
-    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_stack_{datetime.utcnow().isoformat()}.joblib")
+    model_id = fs.put(model_bytes, filename=f"tuned_{model_name}_model.joblib")
 
     # Save metadata in DB
     db.models.insert_one({
         "model_name": model_name,
         "model_id": model_id,
-        "best_params": grid_search.best_params_,
+        "hyperparameters": grid_search.best_params_,
         "accuracy": grid_search.best_score_,
         "created_at": datetime.utcnow()
     })
 
     return jsonify({
-        "message": "Stacking model tuned and saved successfully",
+        "message": "Model tuned and saved successfully",
         "model_name": model_name,
         "best_params": grid_search.best_params_,
         "accuracy": grid_search.best_score_,
@@ -137,29 +136,36 @@ def tune_model():
 @app.route("/predict_tuned", methods=["POST"])
 def predict_tuned():
     data = request.json
-    model_id_str = data.get("model") # Here, 'model' is the model_id from MongoDB
+    model_id_str = data.get("model") # The model ID is passed here
     features = data.get("features")
 
     if not model_id_str or not features:
         return jsonify({"error": "Missing model ID or features"}), 400
 
-    # Find the model's metadata to know if it's kepler or tess
-    model_metadata = db.models.find_one({"model_id": ObjectId(model_id_str)})
+    from bson import ObjectId
+    try:
+        model_id = ObjectId(model_id_str)
+    except Exception:
+        return jsonify({"error": "Invalid model ID format"}), 400
 
-    if not model_metadata:
-        return jsonify({"error": "Tuned model metadata not found"}), 404
+    # Load the specific tuned model from MongoDB
+    tuned_model_data = db.models.find_one({"_id": model_id})
 
-    model_name = model_metadata.get("model_name") # 'kepler' or 'tess'
-    if not model_name:
-         return jsonify({"error": "Model name (kepler/tess) not found in tuned model metadata"}), 500
-    
-    # Load model from GridFS
-    model_file = fs.get(ObjectId(model_id_str))
+    if not tuned_model_data:
+        # Fallback for older references if needed
+        tuned_model_data = db.models.find_one({"model_id": model_id})
+        if not tuned_model_data:
+            return jsonify({"error": "No tuned model found with that ID"}), 404
+
+    model_file_id = tuned_model_data.get("model_id", tuned_model_data["_id"])
+    model_file = fs.get(model_file_id)
     model = joblib.load(model_file)
+    
+    model_base_name = tuned_model_data["model_name"]
 
-    # Load the correct scaler and encoder based on the model name
-    scaler = joblib.load(f"{model_name}_scaler.pkl")
-    le = joblib.load(f"{model_name}_label_encoder.pkl")
+    # Load scaler and encoder from disk based on the original base model name
+    scaler = joblib.load(f"{model_base_name}_scaler.pkl")
+    le = joblib.load(f"{model_base_name}_label_encoder.pkl")
 
     features_scaled = scaler.transform([features])
     probs = model.predict_proba(features_scaled)
@@ -170,7 +176,7 @@ def predict_tuned():
     probabilities_dict = {k: float(v) for k, v in zip(le.classes_, probs[0])}
 
     return jsonify({
-        "model": model_id_str, # Return the id of the tuned model
+        "model": model_base_name,
         "prediction": pred_class,
         "confidence": confidence_val,
         "probabilities": probabilities_dict,
@@ -183,17 +189,19 @@ def predict_tuned():
 # ---------------------------
 @app.route("/tuned_models", methods=["GET"])
 def get_tuned_models():
-    models = list(db.models.find().sort("created_at", -1))
+    models = list(db.models.find())
 
-    # Convert ObjectId to string for JSON serialization
+    # Convert ObjectId to string
     for model in models:
+        # Use the main _id as the primary identifier on the frontend
+        model["model_id"] = str(model["_id"]) 
         model["_id"] = str(model["_id"])
-        if "model_id" in model:
-            model["model_id"] = str(model["model_id"])
-
+        
     return jsonify(models)
 
 
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+    

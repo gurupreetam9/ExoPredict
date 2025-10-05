@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -5,7 +6,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { HelpCircle, Loader2 } from "lucide-react";
-import { useUser } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
+import Link from 'next/link';
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +60,7 @@ import CircularProgress from "@/components/circular-progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import BatchPrediction from "@/components/batch-prediction";
 import ModelTuning from "@/components/model-tuning";
+import { initiateAnonymousSignIn } from "@/firebase/non-blocking-login";
 
 type Prediction = {
   class: string;
@@ -80,6 +83,8 @@ export default function Home() {
   const [prediction, setPrediction] = React.useState<Prediction | null>(null);
   const { toast } = useToast();
   const { user, isUserLoading } = useUser();
+  const auth = useAuth();
+
 
   const formSchema = modelType === "Kepler" ? KeplerSchema : TESSchema;
   const fields: FormFieldConfig[] =
@@ -130,20 +135,17 @@ export default function Home() {
         const val = values[field.name];
         return typeof val === "string" ? parseFloat(val) : val;
       });
-
-      const payload = {
-        model: modelType.toLowerCase(),
-        features: features
-      };
       
       const useTunedModel = selectedModel !== 'default';
       
       const predictionFn = useTunedModel ? getTunedPrediction : getPrediction;
 
-      // The payload for the tuned prediction needs the modelId (which is stored in selectedModel)
-      const finalPayload = useTunedModel ? { ...payload, model: selectedModel } : payload;
+      const payload = {
+        model: useTunedModel ? selectedModel : modelType.toLowerCase(),
+        features: features
+      };
 
-      const { prediction, confidence } = await predictionFn(finalPayload as any);
+      const { prediction, confidence } = await predictionFn(payload as any);
       
       const confidencePercent = confidence * 100;
 
@@ -176,16 +178,22 @@ export default function Home() {
   }
 
   if (!user) {
-      return (
-          <div className="flex h-screen items-center justify-center">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Welcome to ExoPredict</CardTitle>
-                        <CardDescription>Please sign in to continue.</CardDescription>
-                    </CardHeader>
-                </Card>
-          </div>
-      )
+    return (
+        <div className="flex h-screen items-center justify-center">
+              <Card>
+                  <CardHeader>
+                      <CardTitle>Welcome to ExoPredict</CardTitle>
+                      <CardDescription>Please sign in to continue.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <p>Sign in to access model tuning and prediction history.</p>
+                  </CardContent>
+                  <CardFooter>
+                      <Button size="sm" onClick={() => initiateAnonymousSignIn(auth)}>Sign In Anonymously</Button>
+                  </CardFooter>
+              </Card>
+        </div>
+    )
   }
 
   return (
@@ -204,10 +212,14 @@ export default function Home() {
                   <CardTitle className="font-headline text-2xl">
                     Exoplanet Prediction
                   </CardTitle>
-                  <CardDescription>
+                    <CardDescription>
                     Select a model and provide parameters to predict the likelihood
-                    of it being an exoplanet.
-                  </CardDescription>
+                    of it being an exoplanet. Or, use the{' '}
+                    <Link href="/prompt" className="text-primary hover:underline">
+                        prompt-based assistant
+                    </Link>{' '}
+                    to fill in the parameters.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Form {...form}>
@@ -242,7 +254,7 @@ export default function Home() {
                                     <FormControl>
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select a version" />
-                                    </SelectTrigger>
+                                    </Trigger>
                                     </FormControl>
                                     <SelectContent>
                                         <SelectItem value="default">Default</SelectItem>
