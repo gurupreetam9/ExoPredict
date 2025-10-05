@@ -26,6 +26,7 @@ export interface FirebaseHookResult {
   user: User | null;
   isUserLoading: boolean;
   userError: Error | null;
+  setFirebaseServices: (services: { firebaseApp: FirebaseApp; auth: Auth; firestore: Firestore }) => void;
 }
 
 // Return type for useUser() - specific to user auth state
@@ -110,6 +111,7 @@ export const useFirebase = (): FirebaseHookResult => {
     user: context.user,
     isUserLoading: context.isUserLoading,
     userError: context.userError,
+    setFirebaseServices: context.setFirebaseServices,
   };
 };
 
