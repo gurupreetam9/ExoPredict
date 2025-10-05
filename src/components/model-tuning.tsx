@@ -1,13 +1,13 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useToast } from '@/hooks/use-toast';
 import { ModelType, TunedModel } from '@/lib/definitions';
-import { tuneModel } from '@/app/actions';
+import { tuneModel, getTuningStatus } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -45,6 +45,7 @@ const formSchema = z.object({
 
 const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) => {
     const [isTuning, setIsTuning] = useState(false);
+    const [pollingTaskId, setPollingTaskId] = useState<string | null>(null);
     const { toast } = useToast();
 
     const form = useForm<z.infer<typeof formSchema>>({
@@ -60,6 +61,58 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
         },
     });
 
+    useEffect(() => {
+        let intervalId: NodeJS.Timeout | null = null;
+    
+        if (pollingTaskId) {
+          intervalId = setInterval(async () => {
+            console.log(`Polling for task ID: ${pollingTaskId}`);
+            try {
+              const statusResult = await getTuningStatus(pollingTaskId);
+              console.log('Polling result:', statusResult);
+    
+              if (statusResult.status === 'SUCCESS') {
+                toast({
+                  title: 'Model Tuning Completed',
+                  description: `Tuning for ${statusResult.result.model_name} finished with accuracy: ${statusResult.result.accuracy.toFixed(4)}`,
+                });
+                onModelTuned();
+                setIsTuning(false);
+                setPollingTaskId(null); // Stop polling
+              } else if (statusResult.status === 'FAILURE') {
+                toast({
+                  variant: 'destructive',
+                  title: 'Tuning Failed',
+                  description: statusResult.error || 'An unknown error occurred during tuning.',
+                });
+                setIsTuning(false);
+                setPollingTaskId(null); // Stop polling
+              }
+              // If status is 'PENDING', do nothing and wait for the next poll.
+    
+            } catch (error) {
+              console.error('Error polling tuning status:', error);
+              const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+              toast({
+                variant: 'destructive',
+                title: 'Polling Error',
+                description: `Could not get tuning status: ${errorMessage}`,
+              });
+              setIsTuning(false);
+              setPollingTaskId(null); // Stop polling on error
+            }
+          }, 5000); // Poll every 5 seconds
+        }
+    
+        // Cleanup function to clear the interval when the component unmounts or the task ID changes
+        return () => {
+          if (intervalId) {
+            clearInterval(intervalId);
+          }
+        };
+      }, [pollingTaskId, onModelTuned, toast]);
+
+
     const handleTuneModel = async (values: z.infer<typeof formSchema>) => {
         setIsTuning(true);
         console.log("Starting model tuning with values:", values);
@@ -73,22 +126,24 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                 gb_max_depth: values.gb_max_depth || '',
             };
             const result = await tuneModel(values.modelType, params);
-            console.log("Model tuning successful, result:", result);
-            toast({
-                title: 'Model Tuning Completed',
-                description: `Tuning for ${result.model_name} finished with accuracy: ${result.accuracy.toFixed(4)}`,
-            });
-            onModelTuned();
+            console.log("Model tuning started, result:", result);
+            if (result.task_id) {
+                toast({
+                    title: 'Model Tuning Started',
+                    description: 'The model is being tuned in the background. You will be notified upon completion.',
+                });
+                setPollingTaskId(result.task_id);
+            } else {
+                 throw new Error("Backend did not return a task_id.");
+            }
         } catch (error) {
             console.error('Error in handleTuneModel:', error);
             const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
             toast({
                 variant: 'destructive',
                 title: 'Tuning Error',
-                description: errorMessage,
+                description: `Could not start tuning process: ${errorMessage}`,
             });
-        } finally {
-            console.log("Finished model tuning attempt.");
             setIsTuning(false);
         }
     };
@@ -98,7 +153,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
             <Card>
                 <CardHeader>
                     <CardTitle>Tune a New Stacking Model</CardTitle>
-                    <CardDescription>Define hyperparameter grids for the base models in the stacking ensemble.</CardDescription>
+                    <CardDescription>Define hyperparameter grids for the base models in the stacking ensemble. The process will run in the background.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <Form {...form}>
@@ -109,7 +164,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel>Select Base Dataset</FormLabel>
-                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isTuning}>
                                             <FormControl>
                                                 <SelectTrigger>
                                                     <SelectValue placeholder="Select a dataset" />
@@ -125,21 +180,21 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                 )}
                             />
 
-                            <Accordion type="multiple" defaultValue={['rf', 'xgb', 'gb']} className="w-full">
+                            <Accordion type="multiple" defaultValue={['rf']} className="w-full">
                                 <AccordionItem value="rf">
                                     <AccordionTrigger>Random Forest</AccordionTrigger>
                                     <AccordionContent className="space-y-4">
                                         <FormField control={form.control} name="rf_n_estimators" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>N Estimators</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
                                         <FormField control={form.control} name="rf_max_depth" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Max Depth</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 10, 20" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 10, 20" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
@@ -151,14 +206,14 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                         <FormField control={form.control} name="xgb_n_estimators" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>N Estimators</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
                                         <FormField control={form.control} name="xgb_max_depth" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Max Depth</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 5, 10" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 5, 10" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
@@ -170,14 +225,14 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                                         <FormField control={form.control} name="gb_n_estimators" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>N Estimators</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 100, 200" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
                                         <FormField control={form.control} name="gb_max_depth" render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Max Depth</FormLabel>
-                                                <FormControl><Input placeholder="e.g., 3, 5" {...field} /></FormControl>
+                                                <FormControl><Input placeholder="e.g., 3, 5" {...field} disabled={isTuning} /></FormControl>
                                                 <FormMessage />
                                             </FormItem>
                                         )} />
@@ -187,7 +242,7 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
                             
                             <Button type="submit" disabled={isTuning} className="w-full">
                                 {isTuning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                {isTuning ? 'Tuning Model...' : `Tune ${form.watch('modelType')} Stacking Model`}
+                                {isTuning ? 'Tuning in Progress...' : `Tune ${form.watch('modelType')} Stacking Model`}
                             </Button>
                         </form>
                     </Form>
@@ -235,3 +290,5 @@ const ModelTuning: React.FC<ModelTuningProps> = ({ onModelTuned, tunedModels }) 
 };
 
 export default ModelTuning;
+
+    

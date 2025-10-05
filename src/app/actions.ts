@@ -25,7 +25,6 @@ async function handleApiResponse(response: Response) {
         console.error("API Request Failed:", errorData);
         throw new Error(errorData.error || 'API request failed');
     }
-    // Log successful response before parsing
     const responseText = await response.text();
     console.log("Raw API Success Response:", responseText);
     try {
@@ -97,7 +96,7 @@ export async function tuneModel(
         gb_n_estimators: string;
         gb_max_depth: string;
     }
-): Promise<{ message: string, model_name: string, best_params: any, accuracy: number, model_id: string }> {
+): Promise<{ message: string, task_id: string }> {
     
     const parseStringList = (str: string) => str.split(',').map(s => s.trim()).filter(s => s).map(Number);
 
@@ -121,12 +120,23 @@ export async function tuneModel(
         }),
     });
 
-    const result = await handleApiResponse(response);
+    // For 202 Accepted, we expect a task_id
+    if (response.status !== 202) {
+      return handleApiResponse(response);
+    }
+    const result = await response.json();
     console.log("Result from tuneModel action:", result);
     return result;
+}
+
+export async function getTuningStatus(taskId: string): Promise<{ status: string, result?: any, error?: string }> {
+    const response = await fetch(`${API_URL}/tuning_status/${taskId}`);
+    return handleApiResponse(response);
 }
 
 export async function getTunedModels(): Promise<any[]> {
     const response = await fetch(`${API_URL}/tuned_models`);
     return handleApiResponse(response);
 }
+
+    
