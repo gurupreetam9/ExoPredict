@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Rocket, LogOut, User as UserIcon, Loader2 } from "lucide-react";
@@ -11,11 +12,15 @@ export default function Header() {
   const auth = useAuth();
 
   const handleLogin = () => {
-    initiateAnonymousSignIn(auth);
+    if (auth) {
+      initiateAnonymousSignIn(auth);
+    }
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    if (auth) {
+      await signOut(auth);
+    }
   };
 
   return (
@@ -32,7 +37,7 @@ export default function Header() {
           </p>
       </div>
       <div className="flex items-center gap-4">
-        {isUserLoading ? (
+        {isUserLoading || !auth ? (
             <Loader2 className="h-6 w-6 animate-spin" />
         ) : user ? (
           <>
