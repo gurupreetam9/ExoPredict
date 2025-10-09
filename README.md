@@ -47,7 +47,7 @@ Our web interface is divided into **three main sections**, each designed to simp
 ---
 
 ### 2️⃣ Batch Prediction
-- Enables users to **upload a CSV file** (e.g., `test.csv`) containing multiple entries for batch classification.  
+- Enables users to **upload a CSV file** (e.g., `test.csv` [Download test.csv](https://github.com/gurupreetam9/ExoPredict/raw/main/test.csv)) containing multiple entries for batch classification.  
 - The backend processes the file and returns a set of predictions for each record.  
 - Useful for researchers working with large datasets or outputs from telescope surveys.
 
@@ -74,7 +74,7 @@ Our web interface is divided into **three main sections**, each designed to simp
 
 1. Open the web app and navigate to the desired section:
    - **Single Prediction:** Input parameters manually and click “Predict.”  
-   - **Batch Prediction:** Upload your `test.csv` file to predict multiple entries.  
+   - **Batch Prediction:** Upload your `test.csv` [Download test.csv](https://github.com/gurupreetam9/ExoPredict/raw/main/test.csv) file to predict multiple entries.  
    - **Model Tuning:** Provide hyperparameters and start tuning.  
 2. View the results — predictions, confidence scores, and class probabilities — directly on the page.  
 3. Tuned models are automatically saved for later use.
