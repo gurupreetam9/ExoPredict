@@ -48,17 +48,12 @@ const ParameterPopulationInputSchema = z.object({
 export type ParameterPopulationInput = z.infer<typeof ParameterPopulationInputSchema>;
 
 
-const ParameterPopulationOutputSchema = z.union([
-  KeplerInputSchema.partial(),
-  TESSInputSchema.partial(),
-]);
+const ParameterPopulationOutputSchema = KeplerInputSchema.partial().merge(TESSInputSchema.partial());
 
 export type ParameterPopulationOutput = z.infer<typeof ParameterPopulationOutputSchema>;
 
 
-export async function populateParameters(input: ParameterPopulationInput): Promise<ParameterPopulationOutput> {
-  return parameterPopulationFlow(input);
-}
+
 
 const prompt = ai.definePrompt({
   name: 'parameterPopulationPrompt',
@@ -67,53 +62,49 @@ const prompt = ai.definePrompt({
   prompt: `You are an expert exoplanet parameter estimation tool.  The user will provide a
 natural language description of a hypothetical exoplanet scenario. Based on that description, you will estimate the exoplanet parameters for the specified model type.
 
-Make sure that the parameters are in realistic ranges.  For example, the planet radius must be a positive number.
+Make sure that the parameters are in realistic ranges based on known exoplanetary physics. For example, the planet radius must be a positive number.
+
+CRITICAL INSTRUCTION: You MUST estimate a realistic numerical value for EVERY SINGLE parameter requested below. Do NOT leave any parameter blank. Make an educated astronomical guess if the user's prompt is vague.
 
 Model Type: {{{modelType}}}
 Description: {{{prompt}}}
 
-Output the parameters as a JSON object.  If you cannot determine a parameter, leave it blank.
+Output the parameters as a JSON object containing all of the fields below.
 
-Here are the parameter definitions for the model you will be using:
+Here are the parameter definitions you should consider generating based on the Model Type:
 
-{{#eq modelType "Kepler"}}
-{{json (describeSchema KeplerInputSchema)}}
-{{/eq}}
-{{#eq modelType "TESS"}}
-{{json (describeSchema TESSInputSchema)}}
-{{/eq}}
+For Kepler Model:
+- koi_period: Orbital Period (days)
+- koi_time0bk: Time of First Transit (BKJD)
+- koi_impact: Impact Parameter
+- koi_duration: Transit Duration (hours)
+- koi_depth: Transit Depth (ppm)
+- koi_prad: Planet Radius (Earth radii)
+- koi_teq: Equilibrium Temperature (K)
+- koi_insol: Insolation (Earth flux)
+- koi_model_snr: Model SNR
+- koi_steff: Star Temperature (K)
+- koi_slogg: Star Surface Gravity (log10(cm/s^2))
+- koi_srad: Star Radius (solar radii)
+- koi_kepmag: Kepler Magnitude
+
+For TESS Model:
+- pl_orbper: Orbital Period (days)
+- pl_trandurh: Transit Duration (hours)
+- pl_trandep: Transit Depth (ppm)
+- pl_rade: Planet Radius (Earth radii)
+- pl_insol: Insolation (Earth flux)
+- pl_eqt: Equilibrium Temperature (K)
+- st_teff: Star Temperature (K)
+- st_logg: Star Surface Gravity (log10(cm/s^2))
+- st_rad: Star Radius (solar radii)
+- st_dist: Star Distance (pc)
+- st_tmag: Star Magnitude
 `,
-  config: {
-    model: 'googleai/gemini-2.5-flash',
-    safetySettings: [
-      {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_ONLY_HIGH',
-      },
-      {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_NONE',
-      },
-      {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-      },
-      {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_LOW_AND_ABOVE',
-      },
-    ],
-  },
 });
 
-const parameterPopulationFlow = ai.defineFlow(
-  {
-    name: 'parameterPopulationFlow',
-    inputSchema: ParameterPopulationInputSchema,
-    outputSchema: ParameterPopulationOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
+export async function populateParameters(input: ParameterPopulationInput): Promise<ParameterPopulationOutput> {
+  const response = await prompt(input);
+  if (!response.output) throw new Error("No output returned from AI");
+  return response.output as ParameterPopulationOutput;
+}

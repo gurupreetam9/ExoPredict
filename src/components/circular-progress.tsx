@@ -30,10 +30,20 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
   const offset = circumference - (animatedProgress / 100) * circumference;
 
   return (
-    <div className="relative" style={{ width: size, height: size }}>
-      <svg className="absolute top-0 left-0" width={size} height={size}>
+    <div className="relative flex items-center justify-center p-8" style={{ width: size + 60, height: size + 60 }}>
+      <svg className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 overflow-visible" width={size} height={size}>
+        <defs>
+          <linearGradient id="cyanGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#00f2fe" />
+            <stop offset="100%" stopColor="#4facfe" />
+          </linearGradient>
+          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="15" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
         <circle
-          stroke="hsl(var(--border))"
+          stroke="rgba(255,255,255,0.05)"
           fill="transparent"
           strokeWidth={strokeWidth}
           r={radius}
@@ -42,12 +52,13 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
         />
         <circle
           className="transition-all duration-1000 ease-out"
-          stroke="hsl(var(--accent))"
+          stroke="url(#cyanGlow)"
           fill="transparent"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           strokeLinecap="round"
+          filter="url(#glow)"
           r={radius}
           cx={center}
           cy={center}
@@ -55,9 +66,9 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-4xl font-bold text-foreground">
+        <span className="text-6xl font-extrabold text-white font-headline text-glow tracking-tighter" style={{ textShadow: "0 0 30px rgba(0,242,254,0.6)" }}>
           {Math.round(progress)}
-          <span className="text-2xl text-muted-foreground">%</span>
+          <span className="text-3xl text-white/70">%</span>
         </span>
       </div>
     </div>

@@ -22,9 +22,6 @@ const PredictionExplanationOutputSchema = z.object({
 });
 export type PredictionExplanationOutput = z.infer<typeof PredictionExplanationOutputSchema>;
 
-export async function getPredictionExplanation(input: PredictionExplanationInput): Promise<PredictionExplanationOutput> {
-  return predictionExplanationFlow(input);
-}
 
 const prompt = ai.definePrompt({
   name: 'predictionExplanationPrompt',
@@ -48,14 +45,8 @@ const prompt = ai.definePrompt({
 `,
 });
 
-const predictionExplanationFlow = ai.defineFlow(
-  {
-    name: 'predictionExplanationFlow',
-    inputSchema: PredictionExplanationInputSchema,
-    outputSchema: PredictionExplanationOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
-  }
-);
+export async function getPredictionExplanation(input: PredictionExplanationInput): Promise<PredictionExplanationOutput> {
+  const response = await prompt(input);
+  if (!response.output) throw new Error("No output returned from AI");
+  return response.output as PredictionExplanationOutput;
+}

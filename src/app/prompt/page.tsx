@@ -50,8 +50,8 @@ export default function PromptPage() {
       }
       queryParams.append('modelType', values.modelType);
 
-      // Redirect to the home page with the parameters in the query string
-      window.location.href = `/?${queryParams.toString()}`;
+      // Redirect to the home page with the parameters in the query string, completely replacing the history state
+      window.location.replace(`/?${queryParams.toString()}`);
 
     } catch (error) {
       console.error('Error populating parameters:', error);
@@ -127,7 +127,7 @@ export default function PromptPage() {
                   Generate and Apply Parameters
                 </Button>
                 <Button variant="outline" asChild className="w-full">
-                    <Link href="/">Cancel</Link>
+                    <Link href="/" replace>Cancel</Link>
                 </Button>
               </div>
             </form>
