@@ -9,8 +9,6 @@ import { z } from "zod";
 import { HelpCircle, Loader2, Wand2 } from "lucide-react";
 import { useAuth, useUser } from "@/firebase";
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation'
-
 
 import { Button } from "@/components/ui/button";
 import {
@@ -85,8 +83,6 @@ function SinglePredictionTab() {
   const [isLoadingPrediction, setIsLoadingPrediction] = React.useState(false);
   const [prediction, setPrediction] = React.useState<Prediction | null>(null);
   const { toast } = useToast();
-  const searchParams = useSearchParams();
-  const router = useRouter();
 
   const formSchema = modelType === "Kepler" ? KeplerSchema : TESSchema;
   const fields: FormFieldConfig[] =
@@ -115,43 +111,6 @@ function SinglePredictionTab() {
   React.useEffect(() => {
     fetchTunedModels();
   }, [fetchTunedModels]);
-  
-  React.useEffect(() => {
-    // Check for query params and populate the form
-    const params = Object.fromEntries(searchParams.entries());
-    if (Object.keys(params).length > 0) {
-       const urlModelType = params.modelType as ModelType;
-       
-       if (urlModelType && urlModelType !== modelType) {
-          setModelType(urlModelType);
-          return; 
-       }
-
-       const newFields = urlModelType === "Kepler" ? keplerFields : tessFields;
-       const fieldNames = newFields.map(f => f.name);
-       const valuesToSet: Record<string, any> = getInitialValues(newFields);
-       let paramsApplied = false;
-       for (const [key, value] of Object.entries(params)) {
-         if (fieldNames.includes(key)) {
-           valuesToSet[key] = parseFloat(value) || value;
-           paramsApplied = true;
-         }
-       }
-       
-      if (paramsApplied) {
-        form.reset(valuesToSet);
-        setPrediction(null);
-        setSelectedModel("default");
-
-        toast({
-          title: "Parameters Applied",
-          description: "AI-generated parameters have been applied to the form.",
-        });
-        
-        window.history.replaceState(null, '', window.location.pathname);
-      }
-    }
-  }, [modelType, form, searchParams, toast, router]);
 
   const handleModelChange = (value: ModelType) => {
     setModelType(value);
@@ -224,12 +183,6 @@ function SinglePredictionTab() {
         <div className="w-full">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-2xl font-headline font-bold text-white tracking-wide">Input Parameters</h3>
-            <Button asChild className="bg-[#00f2fe]/10 text-[#00f2fe] border border-[#00f2fe]/30 hover:bg-[#00f2fe]/20 hover:scale-105 transition-all shadow-[0_0_15px_rgba(0,242,254,0.3)] backdrop-blur-md rounded-xl">
-               <Link href="/prompt">
-                 <Wand2 className="w-4 h-4 mr-2" />
-                 Use AI Assistant
-               </Link>
-            </Button>
           </div>
           <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 sm:p-8 backdrop-blur-3xl shadow-2xl">
             <Form {...form}>

@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Loader2, Wand2 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +26,7 @@ const formSchema = z.object({
 export default function PromptPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -51,7 +53,7 @@ export default function PromptPage() {
       queryParams.append('modelType', values.modelType);
 
       // Redirect to the home page with the parameters in the query string, completely replacing the history state
-      window.location.replace(`/?${queryParams.toString()}`);
+      router.replace(`/?${queryParams.toString()}`);
 
     } catch (error) {
       console.error('Error populating parameters:', error);
