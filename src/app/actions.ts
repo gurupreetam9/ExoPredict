@@ -9,55 +9,68 @@ import { ModelType } from "@/lib/definitions";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5001';
 
-async function handleApiResponse(response: Response) {
-    if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        let errorData;
-        try {
-            if (contentType && contentType.includes('application/json')) {
-                errorData = await response.json();
-            } else {
-                errorData = { error: await response.text() };
-            }
-        } catch (e) {
-            errorData = { error: 'Could not parse error response.' };
-        }
-        console.error("API Request Failed:", errorData);
-        throw new Error(errorData.error || 'API request failed');
-    }
-    const responseText = await response.text();
-    console.log("Raw API Success Response:", responseText);
+async function fetchWithHandling(url: string, options?: RequestInit) {
+    let response;
     try {
+        response = await fetch(url, options);
+    } catch (error: any) {
+        // Network errors or connection refused (server down)
+        console.error("Network or fetch error:", error.message || error);
+        throw new Error("Prediction services are currently unavailable. Please try again later.");
+    }
+
+    if (!response.ok) {
+        let errorMsg = "Service responded with an error.";
+        try {
+            const errorData = await response.json();
+            errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+            // Couldn't parse JSON, ignore raw HTML dump to prevent ugly UI
+        }
+        
+        console.error("API Request Failed with status:", response.status, errorMsg);
+
+        // Map HTTP statuses to production-friendly UI messages
+        if (response.status >= 500) {
+            throw new Error("We encountered an unexpected issue with our servers. Please try again soon.");
+        } else if (response.status === 429) {
+            throw new Error("We are currently experiencing high traffic. Please wait a moment before trying again.");
+        } else if (response.status === 404) {
+            throw new Error("The requested resource or model could not be found.");
+        } else {
+            // Bad requests (400, 401, 403)
+            throw new Error("Your request could not be processed. Please check your inputs and try again.");
+        }
+    }
+
+    try {
+        const responseText = await response.text();
         return JSON.parse(responseText);
     } catch (e) {
-        console.error("Failed to parse JSON response:", responseText);
-        throw new Error("Failed to parse server response.");
+        console.error("Failed to parse JSON response");
+        throw new Error("The server responded with an invalid format. Please try again later.");
     }
 }
 
 export async function getPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }> {
-  const response = await fetch(`${API_URL}/predict`, {
+  return fetchWithHandling(`${API_URL}/predict`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return handleApiResponse(response);
 }
 
 export async function getTunedPrediction(payload: { model: string; features: number[] }): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }> {
-  const response = await fetch(`${API_URL}/predict_tuned`, {
+  return fetchWithHandling(`${API_URL}/predict_tuned`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  return handleApiResponse(response);
 }
-
 
 export async function getBatchPredictions(payloads: { model: string; features: number[] }[], useTuned: boolean): Promise<{ prediction: string; confidence: number; probabilities: Record<string, number> }[]> {
   const predictionFn = useTuned ? getTunedPrediction : getPrediction;
-  const predictions = await Promise.all(payloads.map(payload => predictionFn(payload as any)));
-  return predictions;
+  return Promise.all(payloads.map(payload => predictionFn(payload as any)));
 }
 
 
@@ -79,11 +92,19 @@ export async function getExplanationForPrediction(
     }
   }
 
-  return await getPredictionExplanation({
-    modelName,
-    inputFeatures: numberFeatures,
-    predictionAccuracy,
-  });
+  try {
+    return await getPredictionExplanation({
+      modelName,
+      inputFeatures: numberFeatures,
+      predictionAccuracy,
+    });
+  } catch (error: any) {
+    console.error("Genkit / LLM Error:", error.message || error);
+    if (error.message?.includes("Quota exceeded") || error.message?.includes("429")) {
+      throw new Error("The AI Assistant is currently unavailable due to high traffic limits. Please try again later.");
+    }
+    throw new Error("The AI Explanation service encountered an unexpected error.");
+  }
 }
 
 export async function tuneModel(
@@ -111,7 +132,7 @@ export async function tuneModel(
 
     console.log("Sending to /tune_model:", { model: modelName.toLowerCase(), hyperparameters: hyperparameterGrid });
 
-    const response = await fetch(`${API_URL}/tune_model`, {
+    return fetchWithHandling(`${API_URL}/tune_model`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -119,24 +140,14 @@ export async function tuneModel(
             hyperparameters: hyperparameterGrid 
         }),
     });
-
-    // For 202 Accepted, we expect a task_id
-    if (response.status !== 202) {
-      return handleApiResponse(response);
-    }
-    const result = await response.json();
-    console.log("Result from tuneModel action:", result);
-    return result;
 }
 
 export async function getTuningStatus(taskId: string): Promise<{ status: string, result?: any, error?: string }> {
-    const response = await fetch(`${API_URL}/tuning_status/${taskId}`);
-    return handleApiResponse(response);
+    return fetchWithHandling(`${API_URL}/tuning_status/${taskId}`);
 }
 
 export async function getTunedModels(): Promise<any[]> {
-    const response = await fetch(`${API_URL}/tuned_models`);
-    return handleApiResponse(response);
+    return fetchWithHandling(`${API_URL}/tuned_models`);
 }
 
     
