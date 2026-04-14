@@ -99,9 +99,10 @@ Our web interface is divided into **three main sections**, each designed to simp
 | Name | Contribution  |
 |------|------|
 | Bodapati Guru Preetam | Model development, integrating the Flask API with the frontend, and handling deployment.
-| Prasanna Kumar Nagaraju | Data gathering, preprocessing, data cleaning, and assisting in model development and improving model accuracy.
+| Prasanna Kumar Nagaraju | Data gathering, preprocessing, data cleaning.
 | Kusam Bhavya Sri | Frontend web development and UI/UX design. 
 | Mahesh Vinnakota | Frontend web development and responsive layout implementation.
+| Krishna Mohan | Assisted in model development and improving model accuracy.
 | Sujay Kaushal | Assisted in backend development, database setup, and monitoring.
 
 ---
